@@ -6,6 +6,10 @@ interface TabInfo {
   id: string
   title: string
   url: string
+  isLoading?: boolean
+  canGoBack?: boolean
+  canGoForward?: boolean
+  favicon?: string
 }
 
 interface WindowState {
@@ -96,7 +100,7 @@ export function TabBar({ windowState, onStateChange }: TabBarProps) {
 
   const handleDragEnd = useCallback(
     async (e: React.DragEvent) => {
-      // Check if dragged outside the tab bar (for detachment)
+      // Check if dragged outside the tab bar (for detachment or recombination)
       if (draggedTab && tabBarRef.current && dragStartPos.current) {
         const rect = tabBarRef.current.getBoundingClientRect()
         const threshold = 50 // pixels outside the tab bar to trigger detachment
@@ -107,9 +111,36 @@ export function TabBar({ windowState, onStateChange }: TabBarProps) {
           e.clientX < rect.left - threshold ||
           e.clientX > rect.right + threshold
 
-        if (isOutside && windowState && windowState.tabs.length > 1) {
-          // Detach the tab to a new window
-          await window.electronAPI.detachTab(draggedTab, e.screenX, e.screenY)
+        if (isOutside && windowState) {
+          // Check if we're dropping onto another window's tab bar area
+          const allWindows = await window.electronAPI.getAllWindows()
+          
+          // Find a window that contains the drop position in its tab bar area
+          // Tab bar is at the top of the window, approximately 80px high
+          const TAB_BAR_HEIGHT = 80
+          let targetWindow = null
+          
+          for (const win of allWindows) {
+            const isInTabBarArea =
+              e.screenX >= win.bounds.x &&
+              e.screenX <= win.bounds.x + win.bounds.width &&
+              e.screenY >= win.bounds.y &&
+              e.screenY <= win.bounds.y + TAB_BAR_HEIGHT
+            
+            if (isInTabBarArea) {
+              targetWindow = win
+              break
+            }
+          }
+          
+          if (targetWindow) {
+            // Transfer tab to the target window
+            // Calculate insert index based on drop position (append to end for now)
+            await window.electronAPI.transferTab(draggedTab, targetWindow.id, -1)
+          } else if (windowState.tabs.length > 1) {
+            // No target window found, detach to new window
+            await window.electronAPI.detachTab(draggedTab, e.screenX, e.screenY)
+          }
         }
       }
 

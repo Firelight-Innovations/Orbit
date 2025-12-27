@@ -1,9 +1,14 @@
+import { useState, useEffect } from 'react'
 import './Tab.css'
 
 interface TabInfo {
   id: string
   title: string
   url: string
+  isLoading?: boolean
+  canGoBack?: boolean
+  canGoForward?: boolean
+  favicon?: string
 }
 
 interface TabProps {
@@ -33,10 +38,20 @@ export function Tab({
   onDrop,
   onDragEnd
 }: TabProps) {
+  const [faviconError, setFaviconError] = useState(false)
+
+  // Reset favicon error state when favicon URL changes
+  useEffect(() => {
+    setFaviconError(false)
+  }, [tab.favicon])
+
   const classNames = ['tab']
   if (isActive) classNames.push('active')
   if (isDragging) classNames.push('dragging')
   if (isDragOver) classNames.push('drag-over')
+
+  const showFavicon = tab.favicon && !faviconError
+  const isOrbitPage = tab.url.startsWith('orbit://')
 
   return (
     <div
@@ -50,9 +65,25 @@ export function Tab({
       onDragEnd={onDragEnd}
     >
       <div className="tab-icon">
-        <svg viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
+        {tab.isLoading ? (
+          <div className="tab-loading-spinner" />
+        ) : showFavicon ? (
+          <img
+            src={tab.favicon}
+            alt=""
+            className="tab-favicon"
+            onError={() => setFaviconError(true)}
+          />
+        ) : isOrbitPage ? (
+          <svg viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+            <circle cx="8" cy="8" r="2" fill="currentColor" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
+        )}
       </div>
       <span className="tab-title">{tab.title}</span>
       <button className="tab-close" onClick={onClose} title="Close tab">

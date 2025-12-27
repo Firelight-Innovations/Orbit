@@ -6,6 +6,7 @@ An Electron application with a Python (FastAPI) backend, featuring a custom titl
 
 - **Custom Title Bar** - Frameless window with draggable title bar and window controls
 - **Chrome-like Tabs** - Multiple tabs with drag-to-reorder and detach-to-new-window support
+- **Smart Autocomplete** - URL bar with search history and visited sites suggestions
 - **Python Backend** - FastAPI powers the backend with automatic OpenAPI documentation
 - **Modern UI** - Dark theme with smooth animations and responsive design
 
@@ -14,22 +15,27 @@ An Electron application with a Python (FastAPI) backend, featuring a custom titl
 ```
 Orbit/
 ├── electron/
-│   ├── main/           # Electron main process
-│   │   ├── index.ts    # App entry, window management
-│   │   ├── ipc.ts      # IPC handlers
-│   │   └── python.ts   # Python backend spawner
-│   ├── preload/        # Preload scripts
-│   └── renderer/       # React frontend
+│   ├── main/              # Electron main process
+│   │   ├── index.ts       # App entry, window management
+│   │   ├── ipc.ts         # IPC handlers
+│   │   ├── python.ts      # Python backend spawner
+│   │   └── services/      # Main process services
+│   │       └── searchHistory.ts  # SQLite search history
+│   ├── preload/           # Preload scripts
+│   └── renderer/          # React frontend
 │       └── src/
 │           ├── components/
-│           │   ├── TitleBar/   # Custom title bar
-│           │   └── Tabs/       # Tab system
+│           │   ├── TitleBar/      # Custom title bar
+│           │   ├── NavigationBar/ # URL bar with autocomplete
+│           │   └── Tabs/          # Tab system
+│           ├── hooks/             # React hooks
 │           └── styles/
-├── backend/            # Python FastAPI backend
+├── backend/               # Python FastAPI backend
 │   ├── app/
-│   │   ├── main.py     # FastAPI app
-│   │   └── routers/    # API routes
+│   │   ├── main.py        # FastAPI app
+│   │   └── routers/       # API routes
 │   └── requirements.txt
+├── docs/                  # Developer documentation
 └── package.json
 ```
 
@@ -132,12 +138,21 @@ The tab system supports Chrome-like functionality:
 - React 18
 - TypeScript
 - Vite (via electron-vite)
+- SQLite (via better-sqlite3)
 
 ### Backend
 - Python 3.10+
 - FastAPI
 - Uvicorn (ASGI server)
 - Pydantic (data validation)
+
+## Developer Documentation
+
+Additional documentation for developers can be found in the `docs/` folder:
+
+| Document | Description |
+|----------|-------------|
+| [Search Autocomplete](docs/search-autocomplete.md) | URL bar autocomplete architecture, APIs, and placeholder logic |
 
 ## License
 

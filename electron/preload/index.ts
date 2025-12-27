@@ -4,12 +4,42 @@ export interface TabInfo {
   id: string
   title: string
   url: string
+  isLoading?: boolean
+  canGoBack?: boolean
+  canGoForward?: boolean
+  favicon?: string
 }
 
 export interface WindowState {
   id: number
   tabs: TabInfo[]
   activeTabId: string | null
+}
+
+export interface AutocompleteSuggestion {
+  id: number
+  type: 'search' | 'visit' | 'search-action'
+  displayText: string
+  url: string | null
+  favicon: string | null
+  visitCount: number
+  aiConfidence?: number
+  // Search action fields
+  searchEngine?: string    // 'orbit' | 'google'
+  actionLabel?: string     // 'Search Orbit'
+  shortcut?: string        // 'Shift+Enter'
+}
+
+export interface SearchHistoryEntry {
+  id: number
+  type: 'search' | 'visit'
+  query: string | null
+  url: string | null
+  title: string | null
+  favicon: string | null
+  visitCount: number
+  lastVisited: string
+  userId: string
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -35,6 +65,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   transferTab: (tabId: string, targetWindowId: number, insertIndex: number) =>
     ipcRenderer.invoke('tabs:transfer', tabId, targetWindowId, insertIndex),
 
+  // Navigation
+  navigate: (tabId: string, url: string) => ipcRenderer.invoke('tabs:navigate', tabId, url),
+  goBack: (tabId: string) => ipcRenderer.invoke('tabs:goBack', tabId),
+  goForward: (tabId: string) => ipcRenderer.invoke('tabs:goForward', tabId),
+  reload: (tabId: string) => ipcRenderer.invoke('tabs:reload', tabId),
+  stop: (tabId: string) => ipcRenderer.invoke('tabs:stop', tabId),
+
+  // Tab view visibility (for autocomplete dropdown overlay)
+  setTabViewVisible: (visible: boolean) => ipcRenderer.invoke('tabs:setViewVisible', visible),
+
   // Tab state updates from main process
   onTabsUpdated: (callback: (state: WindowState) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, state: WindowState) => callback(state)
@@ -42,9 +82,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('tabs:updated', handler)
   },
 
+  // Windows
+  getAllWindows: () => ipcRenderer.invoke('windows:getAll'),
+
   // API
   getApiPort: () => ipcRenderer.invoke('api:getPort'),
-  isApiReady: () => ipcRenderer.invoke('api:isReady')
+  isApiReady: () => ipcRenderer.invoke('api:isReady'),
+
+  // Search History
+  searchHistory: {
+    query: (input: string, limit?: number) =>
+      ipcRenderer.invoke('searchHistory:query', input, limit),
+    addSearch: (query: string) =>
+      ipcRenderer.invoke('searchHistory:addSearch', query),
+    addVisit: (url: string, title?: string, favicon?: string) =>
+      ipcRenderer.invoke('searchHistory:addVisit', url, title, favicon),
+    getRecent: (limit?: number) =>
+      ipcRenderer.invoke('searchHistory:getRecent', limit),
+    delete: (id: number) =>
+      ipcRenderer.invoke('searchHistory:delete', id),
+    clear: () =>
+      ipcRenderer.invoke('searchHistory:clear')
+  }
 })
 
 // Type declarations for the renderer
@@ -71,10 +130,24 @@ declare global {
         targetWindowId: number,
         insertIndex: number
       ) => Promise<{ sourceState: WindowState; targetState: WindowState } | null>
+      navigate: (tabId: string, url: string) => Promise<WindowState | null>
+      goBack: (tabId: string) => Promise<boolean>
+      goForward: (tabId: string) => Promise<boolean>
+      reload: (tabId: string) => Promise<boolean>
+      stop: (tabId: string) => Promise<boolean>
+      setTabViewVisible: (visible: boolean) => Promise<void>
       onTabsUpdated: (callback: (state: WindowState) => void) => () => void
+      getAllWindows: () => Promise<Array<{ id: number; bounds: { x: number; y: number; width: number; height: number } }>>
       getApiPort: () => Promise<number | null>
       isApiReady: () => Promise<boolean>
+      searchHistory: {
+        query: (input: string, limit?: number) => Promise<AutocompleteSuggestion[]>
+        addSearch: (query: string) => Promise<SearchHistoryEntry | null>
+        addVisit: (url: string, title?: string, favicon?: string) => Promise<SearchHistoryEntry | null>
+        getRecent: (limit?: number) => Promise<AutocompleteSuggestion[]>
+        delete: (id: number) => Promise<boolean>
+        clear: () => Promise<boolean>
+      }
     }
   }
 }
-
