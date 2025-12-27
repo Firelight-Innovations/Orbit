@@ -1,16 +1,13 @@
-/* Autocomplete Dropdown Container */
+/* Autocomplete Dropdown Container - rendered via Portal at root level */
 .autocomplete-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
+  /* Position is set inline via style prop for portal positioning */
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: 
     0 4px 16px rgba(0, 0, 0, 0.4),
     0 0 0 1px rgba(139, 92, 246, 0.1);
-  z-index: 1000;
+  z-index: 10000; /* Very high z-index for portal to appear above WebContentsView */
   max-height: 400px;
   overflow: hidden;
   animation: dropdownSlideIn 0.15s ease-out;

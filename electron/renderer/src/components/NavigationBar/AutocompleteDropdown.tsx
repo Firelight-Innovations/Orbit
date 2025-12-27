@@ -1,4 +1,5 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { createPortal } from 'react-dom'
 import type { AutocompleteSuggestion } from '../../hooks/useSearchHistory'
 import './AutocompleteDropdown.css'
 
@@ -8,6 +9,7 @@ interface AutocompleteDropdownProps {
   onSelect: (suggestion: AutocompleteSuggestion) => void
   onDelete?: (id: number) => void
   inputValue: string
+  anchorRect: DOMRect | null
 }
 
 export interface AutocompleteDropdownRef {
@@ -21,7 +23,7 @@ export interface AutocompleteDropdownRef {
  */
 export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, AutocompleteDropdownProps>(
   function AutocompleteDropdown(
-    { suggestions, selectedIndex, onSelect, onDelete, inputValue },
+    { suggestions, selectedIndex, onSelect, onDelete, inputValue, anchorRect },
     ref
   ) {
     const listRef = useRef<HTMLUListElement>(null)
@@ -249,8 +251,20 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
       )
     }
 
-    return (
-      <div className="autocomplete-dropdown">
+    // Get portal root element
+    const portalRoot = document.getElementById('dropdown-portal')
+    if (!portalRoot || !anchorRect) return null
+
+    const dropdownContent = (
+      <div 
+        className="autocomplete-dropdown"
+        style={{
+          position: 'fixed',
+          top: anchorRect.bottom + 4,
+          left: anchorRect.left,
+          width: anchorRect.width,
+        }}
+      >
         {suggestions.length === 0 ? (
           <div className="autocomplete-empty">
             <div className="empty-icon">
@@ -291,6 +305,8 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
         {/* === END PLACEHOLDER === */}
       </div>
     )
+
+    return createPortal(dropdownContent, portalRoot)
   }
 )
 

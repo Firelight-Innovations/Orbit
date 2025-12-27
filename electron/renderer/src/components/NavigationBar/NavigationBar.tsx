@@ -24,6 +24,7 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
   const [isFocused, setIsFocused] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null)
   
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<AutocompleteDropdownRef>(null)
@@ -53,23 +54,30 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
   }, [inputValue, isFocused, query])
 
   // Show dropdown whenever URL bar is focused (Chrome-like behavior)
-  // Also hide the tab view so dropdown appears above web content
   useEffect(() => {
     if (isFocused) {
       setShowDropdown(true)
-      // Hide the tab view so dropdown appears on top of web content
-      window.electronAPI.setTabViewVisible(false)
     } else {
       // Small delay before hiding to allow click events on dropdown
       const timer = setTimeout(() => {
         setShowDropdown(false)
         clearSuggestions()
-        // Show the tab view again
-        window.electronAPI.setTabViewVisible(true)
       }, 150)
       return () => clearTimeout(timer)
     }
   }, [isFocused, clearSuggestions])
+
+  // Update anchor rect for portal positioning when dropdown shows
+  useEffect(() => {
+    if (showDropdown && urlBarRef.current) {
+      const updateRect = () => {
+        setAnchorRect(urlBarRef.current?.getBoundingClientRect() ?? null)
+      }
+      updateRect()
+      window.addEventListener('resize', updateRect)
+      return () => window.removeEventListener('resize', updateRect)
+    }
+  }, [showDropdown])
 
   const handleBack = () => {
     if (activeTab?.canGoBack) {
@@ -345,7 +353,7 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
           </div>
         )}
 
-        {/* Autocomplete Dropdown */}
+        {/* Autocomplete Dropdown - rendered via Portal for proper z-index layering */}
         {showDropdown && (
           <AutocompleteDropdown
             ref={dropdownRef}
@@ -354,6 +362,7 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
             onSelect={handleSelectSuggestion}
             onDelete={handleDeleteSuggestion}
             inputValue={inputValue}
+            anchorRect={anchorRect}
           />
         )}
       </div>
