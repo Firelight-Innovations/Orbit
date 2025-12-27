@@ -50,7 +50,8 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
 
     // Group suggestions by type
     const searchActions = suggestions.filter(s => s.type === 'search-action')
-    const historySuggestions = suggestions.filter(s => s.type !== 'search-action')
+    const historySuggestions = suggestions.filter(s => s.type !== 'search-action' && s.type !== 'fi-suggestion')
+    const fiSuggestions = suggestions.filter(s => s.type === 'fi-suggestion')
 
     // Highlight matching text in the suggestion
     const highlightMatch = (text: string) => {
@@ -136,16 +137,34 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
     }
 
     // Calculate actual index in the combined list
-    const getActualIndex = (isAction: boolean, localIndex: number) => {
-      if (isAction) {
+    const getActualIndex = (sectionType: 'action' | 'history' | 'fi', localIndex: number) => {
+      if (sectionType === 'action') {
         return localIndex
       }
-      return searchActions.length + localIndex
+      if (sectionType === 'history') {
+        return searchActions.length + localIndex
+      }
+      // Fi suggestions come after history
+      return searchActions.length + historySuggestions.length + localIndex
     }
+
+    // Fi icon for suggestions
+    const getFiIcon = () => (
+      <svg viewBox="0 0 16 16" fill="none" className="suggestion-icon fi-icon">
+        <circle cx="8" cy="8" r="6" stroke="url(#fiGradient)" strokeWidth="1.5" />
+        <path d="M5.5 8h5M8 5.5v5" stroke="url(#fiGradient)" strokeWidth="1.5" strokeLinecap="round" />
+        <defs>
+          <linearGradient id="fiGradient" x1="2" y1="2" x2="14" y2="14">
+            <stop stopColor="#8b5cf6" />
+            <stop offset="1" stopColor="#06b6d4" />
+          </linearGradient>
+        </defs>
+      </svg>
+    )
 
     // Render a search action item
     const renderSearchAction = (suggestion: AutocompleteSuggestion, localIndex: number) => {
-      const actualIndex = getActualIndex(true, localIndex)
+      const actualIndex = getActualIndex('action', localIndex)
       return (
         <li
           key={suggestion.id}
@@ -180,7 +199,7 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
 
     // Render a history/visit item
     const renderHistoryItem = (suggestion: AutocompleteSuggestion, localIndex: number) => {
-      const actualIndex = getActualIndex(false, localIndex)
+      const actualIndex = getActualIndex('history', localIndex)
       return (
         <li
           key={suggestion.id}
@@ -244,6 +263,34 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
       )
     }
 
+    // Render a Fi suggestion item
+    const renderFiSuggestion = (suggestion: AutocompleteSuggestion, localIndex: number) => {
+      const actualIndex = getActualIndex('fi', localIndex)
+      return (
+        <li
+          key={suggestion.id}
+          ref={actualIndex === selectedIndex ? selectedItemRef : null}
+          className={`autocomplete-item fi-suggestion-item ${actualIndex === selectedIndex ? 'selected' : ''}`}
+          onClick={() => onSelect(suggestion)}
+          onMouseDown={(e) => e.preventDefault()}
+          role="option"
+          aria-selected={actualIndex === selectedIndex}
+        >
+          <div className="suggestion-icon-container">
+            {getFiIcon()}
+          </div>
+          
+          <div className="suggestion-content">
+            <span className="suggestion-text">
+              {highlightMatch(suggestion.displayText)}
+            </span>
+          </div>
+
+          <span className="fi-badge">Fi</span>
+        </li>
+      )
+    }
+
     // Get portal root element
     const portalRoot = document.getElementById('dropdown-portal')
     if (!portalRoot || !anchorRect) return null
@@ -280,6 +327,16 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
             
             {/* History Section */}
             {historySuggestions.map((suggestion, index) => renderHistoryItem(suggestion, index))}
+
+            {/* Divider between history and Fi suggestions */}
+            {(searchActions.length > 0 || historySuggestions.length > 0) && fiSuggestions.length > 0 && (
+              <li className="suggestion-divider fi-divider" role="separator" aria-hidden="true">
+                <span className="fi-divider-label">Fi Suggestions</span>
+              </li>
+            )}
+
+            {/* Fi Suggestions Section */}
+            {fiSuggestions.map((suggestion, index) => renderFiSuggestion(suggestion, index))}
           </ul>
         )}
 

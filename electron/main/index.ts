@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupIpcHandlers } from './ipc'
 import { PythonBackend } from './python'
 import { closeSearchHistoryService, getSearchHistoryService } from './services/searchHistory'
+import { closeSearchSuggestionsService } from './services/searchSuggestions'
 
 // Get the app icon path
 const iconPath = join(__dirname, '../../resources/orbit_logo.png')
@@ -547,6 +548,9 @@ app.on('window-all-closed', async () => {
 
   // Close search history database
   closeSearchHistoryService()
+
+  // Close search suggestions service
+  closeSearchSuggestionsService()
 
   if (process.platform !== 'darwin') {
     app.quit()

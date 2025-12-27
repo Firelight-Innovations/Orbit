@@ -42,6 +42,16 @@ export interface SearchHistoryEntry {
   userId: string
 }
 
+export interface FiSuggestion {
+  id: number
+  type: 'fi-suggestion'
+  displayText: string
+  url: null
+  favicon: null
+  visitCount: 0
+  isFiSuggestion: true
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -106,6 +116,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('searchHistory:delete', id),
     clear: () =>
       ipcRenderer.invoke('searchHistory:clear')
+  },
+
+  // Fi Search Suggestions
+  fiSuggestions: {
+    get: (query: string) =>
+      ipcRenderer.invoke('fiSuggestions:get', query)
   }
 })
 
@@ -151,6 +167,9 @@ declare global {
         getRecent: (limit?: number) => Promise<AutocompleteSuggestion[]>
         delete: (id: number) => Promise<boolean>
         clear: () => Promise<boolean>
+      }
+      fiSuggestions: {
+        get: (query: string) => Promise<FiSuggestion[]>
       }
     }
   }

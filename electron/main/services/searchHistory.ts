@@ -113,6 +113,18 @@ export class SearchHistoryService {
       CREATE INDEX IF NOT EXISTS idx_search_history_url ON search_history(url);
       CREATE INDEX IF NOT EXISTS idx_search_history_user ON search_history(user_id);
       CREATE INDEX IF NOT EXISTS idx_search_history_last_visited ON search_history(last_visited DESC);
+
+      -- Fi Suggestions Cache table for external search suggestions
+      CREATE TABLE IF NOT EXISTS fi_suggestions_cache (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        query TEXT NOT NULL UNIQUE,
+        suggestions TEXT NOT NULL,
+        cached_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        hit_count INTEGER DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_fi_cache_query ON fi_suggestions_cache(query);
+      CREATE INDEX IF NOT EXISTS idx_fi_cache_time ON fi_suggestions_cache(cached_at);
     `)
   }
 

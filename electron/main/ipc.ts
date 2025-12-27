@@ -13,6 +13,7 @@ import {
   setUIViewFullscreen
 } from './index'
 import { getSearchHistoryService } from './services/searchHistory'
+import { getSearchSuggestionsService } from './services/searchSuggestions'
 
 export function setupIpcHandlers(
   windowStates: Map<number, WindowState>,
@@ -452,6 +453,17 @@ export function setupIpcHandlers(
     } catch (error) {
       console.error('Error clearing search history:', error)
       return false
+    }
+  })
+
+  // Fi Suggestions handlers
+  ipcMain.handle('fiSuggestions:get', async (_event, query: string) => {
+    try {
+      const service = getSearchSuggestionsService()
+      return await service.getSuggestions(query)
+    } catch (error) {
+      console.error('Error fetching Fi suggestions:', error)
+      return []
     }
   })
 }

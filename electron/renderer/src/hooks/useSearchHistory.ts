@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 
 export interface AutocompleteSuggestion {
   id: number
-  type: 'search' | 'visit' | 'search-action'
+  type: 'search' | 'visit' | 'search-action' | 'fi-suggestion'
   displayText: string
   url: string | null
   favicon: string | null
@@ -12,6 +12,8 @@ export interface AutocompleteSuggestion {
   searchEngine?: string    // 'orbit' | 'google'
   actionLabel?: string     // 'Search Orbit'
   shortcut?: string        // 'Shift+Enter'
+  // Fi suggestion flag
+  isFiSuggestion?: boolean
 }
 
 interface UseSearchHistoryOptions {
@@ -88,10 +90,32 @@ export function useSearchHistory(options: UseSearchHistoryOptions = {}): UseSear
     setIsLoading(true)
     debounceTimerRef.current = setTimeout(async () => {
       try {
-        const results = await window.electronAPI.searchHistory.query(input, maxSuggestions)
+        // Fetch history and Fi suggestions in parallel
+        const [historyResults, fiSuggestions] = await Promise.all([
+          window.electronAPI.searchHistory.query(input, maxSuggestions),
+          window.electronAPI.fiSuggestions.get(input)
+        ])
+        
         // Only update if this is still the current query
         if (lastQueryRef.current === input) {
-          setSuggestions(results)
+          // Merge results: search actions first, then history, then Fi suggestions
+          // Deduplicate by display text (case-insensitive)
+          const historyTexts = new Set(
+            historyResults.map(h => h.displayText.toLowerCase())
+          )
+          
+          // Filter Fi suggestions that don't duplicate history
+          const filteredFiSuggestions: AutocompleteSuggestion[] = fiSuggestions
+            .filter(fi => !historyTexts.has(fi.displayText.toLowerCase()))
+            .map(fi => ({
+              ...fi,
+              type: 'fi-suggestion' as const,
+              isFiSuggestion: true
+            }))
+          
+          // Combine: history results already include search-actions at the start
+          // Add Fi suggestions after history items
+          setSuggestions([...historyResults, ...filteredFiSuggestions])
         }
       } catch (error) {
         console.error('Error querying suggestions:', error)
