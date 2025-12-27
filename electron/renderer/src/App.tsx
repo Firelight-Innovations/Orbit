@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { TitleBar } from './components/TitleBar/TitleBar'
 import { NavigationBar } from './components/NavigationBar/NavigationBar'
 import { TabContent } from './components/Tabs/TabContent'
+import { WelcomeScreen } from './components/Welcome/WelcomeScreen'
+import { ProfilesPage } from './components/Profiles/ProfilesPage'
 import orbitLogo from './assets/orbit_logo.png'
 
 // Height of header (title bar + navigation bar) - must match HEADER_HEIGHT in main process
@@ -26,11 +28,15 @@ interface WindowState {
 function App() {
   const [windowState, setWindowState] = useState<WindowState | null>(null)
   const [apiPort, setApiPort] = useState<number | null>(null)
+  const [showWelcome, setShowWelcome] = useState<boolean | null>(null) // null = loading
   
   // Attention-based focus system: when true, web content receives all mouse events
   const [webContentHasAttention, setWebContentHasAttention] = useState(false)
 
   useEffect(() => {
+    // Check if onboarding is complete
+    checkOnboardingStatus()
+    
     // Load initial state
     window.electronAPI.getTabState().then(setWindowState)
     window.electronAPI.getApiPort().then(setApiPort)
@@ -42,6 +48,21 @@ function App() {
 
     return unsubscribe
   }, [])
+
+  const checkOnboardingStatus = async () => {
+    try {
+      const isComplete = await window.electronAPI.profile.isOnboardingComplete()
+      setShowWelcome(!isComplete)
+    } catch (error) {
+      console.error('Failed to check onboarding status:', error)
+      // Default to not showing welcome if there's an error
+      setShowWelcome(false)
+    }
+  }
+
+  const handleWelcomeComplete = () => {
+    setShowWelcome(false)
+  }
 
   const activeTab = windowState?.tabs.find((tab) => tab.id === windowState.activeTabId)
 
@@ -88,6 +109,51 @@ function App() {
     }
   }
 
+  // Render content based on the current URL
+  const renderContent = () => {
+    if (!activeTab) {
+      return (
+        <div className="welcome-screen">
+          <div className="welcome-logo">
+            <img src={orbitLogo} alt="Orbit" />
+          </div>
+          <h1 className="welcome-title">Welcome to Orbit</h1>
+          <p className="welcome-subtitle">Create a new tab to get started</p>
+        </div>
+      )
+    }
+
+    const url = activeTab.url
+
+    // Handle different internal pages
+    if (url.startsWith('orbit://profiles')) {
+      return <ProfilesPage onNavigate={handleNavigate} />
+    }
+
+    // Default TabContent for other internal pages
+    return <TabContent tab={activeTab} apiPort={apiPort} />
+  }
+
+  // Show loading state while checking onboarding
+  if (showWelcome === null) {
+    return (
+      <div className="app">
+        <div className="flex h-full items-center justify-center bg-[#0a0a0b]">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
+        </div>
+      </div>
+    )
+  }
+
+  // Show welcome screen for new users
+  if (showWelcome) {
+    return (
+      <div className="app">
+        <WelcomeScreen onComplete={handleWelcomeComplete} />
+      </div>
+    )
+  }
+
   return (
     <div className="app">
       <TitleBar windowState={windowState} onStateChange={setWindowState} />
@@ -96,17 +162,7 @@ function App() {
         {/* Only render React content for internal pages (orbit://) */}
         {/* External pages are rendered by WebContentsView overlay from main process */}
         {isInternalPage ? (
-          activeTab ? (
-            <TabContent tab={activeTab} apiPort={apiPort} />
-          ) : (
-            <div className="welcome-screen">
-              <div className="welcome-logo">
-                <img src={orbitLogo} alt="Orbit" />
-              </div>
-              <h1 className="welcome-title">Welcome to Orbit</h1>
-              <p className="welcome-subtitle">Create a new tab to get started</p>
-            </div>
-          )
+          renderContent()
         ) : (
           // Placeholder for external pages - WebContentsView renders behind
           // Click to give attention to web content, then pointer-events: none to let clicks through

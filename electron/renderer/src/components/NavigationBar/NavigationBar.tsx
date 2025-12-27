@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import { useSearchHistory, type AutocompleteSuggestion } from '../../hooks/useSearchHistory'
 import { AutocompleteDropdown, type AutocompleteDropdownRef } from './AutocompleteDropdown'
+import { ProfileButton } from './ProfileButton'
 import { buildSearchUrl } from '../../config/searchEngines'
 import orbitLogo from '../../assets/orbit_logo.png'
 import './NavigationBar.css'
@@ -458,6 +459,11 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
             anchorRect={anchorRect}
           />
         )}
+      </div>
+
+      {/* Profile Button */}
+      <div className="profile-button-container">
+        <ProfileButton onNavigate={onNavigate} />
       </div>
     </div>
   )

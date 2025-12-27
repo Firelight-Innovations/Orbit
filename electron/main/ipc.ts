@@ -14,6 +14,8 @@ import {
 } from './index'
 import { getSearchHistoryService } from './services/searchHistory'
 import { getSearchSuggestionsService } from './services/searchSuggestions'
+import * as profileService from './services/profileService'
+import * as chromeImporter from './services/chromeImporter'
 
 export function setupIpcHandlers(
   windowStates: Map<number, WindowState>,
@@ -465,5 +467,100 @@ export function setupIpcHandlers(
       console.error('Error fetching Fi suggestions:', error)
       return []
     }
+  })
+
+  // Profile Management handlers
+  ipcMain.handle('profile:isFirstLaunch', () => {
+    return profileService.isFirstLaunch()
+  })
+
+  ipcMain.handle('profile:isOnboardingComplete', () => {
+    return profileService.isOnboardingComplete()
+  })
+
+  ipcMain.handle('profile:completeOnboarding', () => {
+    profileService.completeOnboarding()
+    return true
+  })
+
+  ipcMain.handle('profile:getProfiles', () => {
+    return profileService.getProfiles()
+  })
+
+  ipcMain.handle('profile:getActiveProfile', () => {
+    return profileService.getActiveProfile()
+  })
+
+  ipcMain.handle('profile:getActiveProfileId', () => {
+    return profileService.getActiveProfileId()
+  })
+
+  ipcMain.handle('profile:createProfile', (_event, name: string, color?: string, avatar?: string) => {
+    return profileService.createProfile(
+      name,
+      (color as profileService.ProfileColor) || profileService.PROFILE_COLORS[0],
+      avatar
+    )
+  })
+
+  ipcMain.handle('profile:updateProfile', (_event, profileId: string, updates: Partial<profileService.OrbitProfile>) => {
+    return profileService.updateProfile(profileId, updates)
+  })
+
+  ipcMain.handle('profile:deleteProfile', (_event, profileId: string) => {
+    return profileService.deleteProfile(profileId)
+  })
+
+  ipcMain.handle('profile:setActiveProfile', (_event, profileId: string) => {
+    return profileService.setActiveProfile(profileId)
+  })
+
+  ipcMain.handle('profile:getProfileColors', () => {
+    return profileService.PROFILE_COLORS
+  })
+
+  // Chrome Import handlers
+  ipcMain.handle('chrome:isInstalled', () => {
+    return chromeImporter.isChromeInstalled()
+  })
+
+  ipcMain.handle('chrome:detectProfiles', () => {
+    return chromeImporter.detectChromeProfiles()
+  })
+
+  ipcMain.handle('chrome:getProfileSummary', (_event, profilePath: string) => {
+    const profiles = chromeImporter.detectChromeProfiles()
+    const profile = profiles.find(p => p.path === profilePath)
+    if (!profile) return null
+    return chromeImporter.getProfileDataSummary(profile)
+  })
+
+  ipcMain.handle('chrome:importProfile', async (_event, chromeProfilePath: string, newProfileName: string, categories?: string[]) => {
+    const profiles = chromeImporter.detectChromeProfiles()
+    const chromeProfile = profiles.find(p => p.path === chromeProfilePath)
+    
+    if (!chromeProfile) {
+      return { success: false, error: 'Chrome profile not found' }
+    }
+
+    const importCategories = categories as chromeImporter.ImportCategory[] | undefined
+
+    // Note: Progress callback would need WebSocket or similar for real-time updates
+    // For now, we'll do the import synchronously
+    return await chromeImporter.importChromeProfile(
+      chromeProfile,
+      newProfileName,
+      importCategories
+    )
+  })
+
+  ipcMain.handle('chrome:isRunning', () => {
+    return chromeImporter.isChromeRunning()
+  })
+
+  // Development/testing helpers
+  ipcMain.handle('profile:resetFirstLaunch', () => {
+    profileService.resetFirstLaunch()
+    return true
   })
 }

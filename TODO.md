@@ -2,7 +2,7 @@
 - [] Create welcome screen + import chrome profile
 - [*] Import Fi along with chromium browser
 - [] Move Fi to LangChain
-- [] Create tab system, render chrome instance within it
+- [*] Create tab system, render chrome instance within it
 - [] Create shortcut bar (pull from chromium)
 - [] Create extension UI (pull from chromium)
 - [] Create settings UI (pull from chromium)

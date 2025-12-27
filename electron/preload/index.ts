@@ -52,6 +52,28 @@ export interface FiSuggestion {
   isFiSuggestion: true
 }
 
+export interface OrbitProfile {
+  id: string
+  name: string
+  color: string
+  avatar?: string
+  createdAt: string
+  lastUsed: string
+  isImported: boolean
+  chromeProfileName?: string
+}
+
+export interface ChromeProfileInfo {
+  name: string
+  directoryName: string
+  email?: string
+  avatar?: string
+  isDefault: boolean
+  path: string
+}
+
+export type ImportCategory = 'bookmarks' | 'history' | 'cookies' | 'extensions' | 'passwords' | 'preferences'
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -60,6 +82,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  
+  // Window namespace (for better organization)
+  window: {
+    minimize: () => ipcRenderer.send('window:minimize'),
+    maximize: () => ipcRenderer.send('window:maximize'),
+    close: () => ipcRenderer.send('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  },
 
   // Tab management
   getTabState: () => ipcRenderer.invoke('tabs:getState'),
@@ -122,6 +152,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fiSuggestions: {
     get: (query: string) =>
       ipcRenderer.invoke('fiSuggestions:get', query)
+  },
+
+  // Profile Management
+  profile: {
+    isFirstLaunch: () => ipcRenderer.invoke('profile:isFirstLaunch'),
+    isOnboardingComplete: () => ipcRenderer.invoke('profile:isOnboardingComplete'),
+    completeOnboarding: () => ipcRenderer.invoke('profile:completeOnboarding'),
+    getProfiles: () => ipcRenderer.invoke('profile:getProfiles'),
+    getActiveProfile: () => ipcRenderer.invoke('profile:getActiveProfile'),
+    getActiveProfileId: () => ipcRenderer.invoke('profile:getActiveProfileId'),
+    createProfile: (name: string, color?: string, avatar?: string) =>
+      ipcRenderer.invoke('profile:createProfile', name, color, avatar),
+    updateProfile: (profileId: string, updates: Partial<OrbitProfile>) =>
+      ipcRenderer.invoke('profile:updateProfile', profileId, updates),
+    deleteProfile: (profileId: string) =>
+      ipcRenderer.invoke('profile:deleteProfile', profileId),
+    setActiveProfile: (profileId: string) =>
+      ipcRenderer.invoke('profile:setActiveProfile', profileId),
+    getProfileColors: () => ipcRenderer.invoke('profile:getProfileColors'),
+    resetFirstLaunch: () => ipcRenderer.invoke('profile:resetFirstLaunch')
+  },
+
+  // Chrome Import
+  chrome: {
+    isInstalled: () => ipcRenderer.invoke('chrome:isInstalled'),
+    detectProfiles: () => ipcRenderer.invoke('chrome:detectProfiles'),
+    getProfileSummary: (profilePath: string) =>
+      ipcRenderer.invoke('chrome:getProfileSummary', profilePath),
+    importProfile: (chromeProfilePath: string, newProfileName: string, categories?: ImportCategory[]) =>
+      ipcRenderer.invoke('chrome:importProfile', chromeProfilePath, newProfileName, categories),
+    isRunning: () => ipcRenderer.invoke('chrome:isRunning')
   }
 })
 
@@ -160,6 +221,12 @@ declare global {
       getAllWindows: () => Promise<Array<{ id: number; bounds: { x: number; y: number; width: number; height: number } }>>
       getApiPort: () => Promise<number | null>
       isApiReady: () => Promise<boolean>
+      window: {
+        minimize: () => void
+        maximize: () => void
+        close: () => void
+        isMaximized: () => Promise<boolean>
+      }
       searchHistory: {
         query: (input: string, limit?: number) => Promise<AutocompleteSuggestion[]>
         addSearch: (query: string) => Promise<SearchHistoryEntry | null>
@@ -170,6 +237,27 @@ declare global {
       }
       fiSuggestions: {
         get: (query: string) => Promise<FiSuggestion[]>
+      }
+      profile: {
+        isFirstLaunch: () => Promise<boolean>
+        isOnboardingComplete: () => Promise<boolean>
+        completeOnboarding: () => Promise<boolean>
+        getProfiles: () => Promise<OrbitProfile[]>
+        getActiveProfile: () => Promise<OrbitProfile | null>
+        getActiveProfileId: () => Promise<string | null>
+        createProfile: (name: string, color?: string, avatar?: string) => Promise<OrbitProfile>
+        updateProfile: (profileId: string, updates: Partial<OrbitProfile>) => Promise<OrbitProfile | null>
+        deleteProfile: (profileId: string) => Promise<boolean>
+        setActiveProfile: (profileId: string) => Promise<boolean>
+        getProfileColors: () => Promise<string[]>
+        resetFirstLaunch: () => Promise<boolean>
+      }
+      chrome: {
+        isInstalled: () => Promise<boolean>
+        detectProfiles: () => Promise<ChromeProfileInfo[]>
+        getProfileSummary: (profilePath: string) => Promise<Record<ImportCategory, boolean> | null>
+        importProfile: (chromeProfilePath: string, newProfileName: string, categories?: ImportCategory[]) => Promise<{ success: boolean; profileId?: string; error?: string }>
+        isRunning: () => Promise<boolean>
       }
     }
   }
