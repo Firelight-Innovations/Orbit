@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import { useSearchHistory, type AutocompleteSuggestion } from '../../hooks/useSearchHistory'
 import { AutocompleteDropdown, type AutocompleteDropdownRef } from './AutocompleteDropdown'
 import { buildSearchUrl } from '../../config/searchEngines'
+import orbitLogo from '../../assets/orbit_logo.png'
 import './NavigationBar.css'
 
 interface TabInfo {
@@ -25,6 +26,10 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null)
+  // Track user's actual typed input for inline autocomplete
+  const [userTypedValue, setUserTypedValue] = useState('')
+  // Track if we should apply inline autocomplete (disabled during deletion)
+  const [enableInlineAutocomplete, setEnableInlineAutocomplete] = useState(true)
   
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<AutocompleteDropdownRef>(null)
@@ -45,13 +50,50 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
     }
   }, [activeTab?.url, isFocused])
 
-  // Query suggestions when input changes and focused
+  // Query suggestions when user types and focused
   useEffect(() => {
-    if (isFocused) {
-      query(inputValue)
+    if (isFocused && userTypedValue) {
+      query(userTypedValue)
       setSelectedIndex(-1) // Reset selection on new input
     }
-  }, [inputValue, isFocused, query])
+  }, [userTypedValue, isFocused, query])
+
+  // Find best inline autocomplete match and apply it
+  useEffect(() => {
+    if (!isFocused || !enableInlineAutocomplete || !userTypedValue.trim()) {
+      return
+    }
+
+    // Find first suggestion that starts with user's input (case-insensitive)
+    // Skip search-action type suggestions for inline autocomplete
+    const userLower = userTypedValue.toLowerCase()
+    const match = suggestions.find(s => {
+      if (s.type === 'search-action') return false
+      const text = s.type === 'visit' && s.url ? s.url : s.displayText
+      return text.toLowerCase().startsWith(userLower)
+    })
+
+    if (match) {
+      const fullText = match.type === 'visit' && match.url ? match.url : match.displayText
+      // Only apply if the match is longer than what user typed
+      if (fullText.length > userTypedValue.length) {
+        // Preserve the user's original casing for the typed portion
+        const autocompletedValue = userTypedValue + fullText.slice(userTypedValue.length)
+        setInputValue(autocompletedValue)
+        
+        // Select the autocompleted portion (will appear highlighted)
+        requestAnimationFrame(() => {
+          if (inputRef.current) {
+            inputRef.current.setSelectionRange(userTypedValue.length, autocompletedValue.length)
+          }
+        })
+        return
+      }
+    }
+
+    // No match found, just show what user typed
+    setInputValue(userTypedValue)
+  }, [suggestions, userTypedValue, isFocused, enableInlineAutocomplete])
 
   // Show dropdown whenever URL bar is focused (Chrome-like behavior)
   useEffect(() => {
@@ -99,6 +141,12 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
     } else {
       window.electronAPI.reload(activeTab.id)
     }
+  }
+
+  const handleOrbitLogoClick = () => {
+    onNavigate('orbit://search')
+    setShowDropdown(false)
+    inputRef.current?.blur()
   }
 
   /**
@@ -165,28 +213,50 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
           return
 
         case 'Tab':
-          // Tab to select current suggestion without navigating
+          // Tab accepts inline autocomplete or selected suggestion
+          e.preventDefault()
           if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
-            e.preventDefault()
+            // Use arrow-selected suggestion
             const suggestion = suggestions[selectedIndex]
-            if (suggestion.type === 'visit' && suggestion.url) {
-              setInputValue(suggestion.url)
-            } else {
-              setInputValue(suggestion.displayText)
-            }
+            const value = suggestion.type === 'visit' && suggestion.url 
+              ? suggestion.url 
+              : suggestion.displayText
+            setInputValue(value)
+            setUserTypedValue(value)
             setSelectedIndex(-1)
+          } else if (inputValue !== userTypedValue) {
+            // Accept inline autocomplete
+            setUserTypedValue(inputValue)
+            // Move cursor to end
+            requestAnimationFrame(() => {
+              inputRef.current?.setSelectionRange(inputValue.length, inputValue.length)
+            })
           }
           return
+
+        case 'ArrowRight': {
+          // Right arrow at end of typed text accepts inline autocomplete
+          const selectionStart = inputRef.current?.selectionStart ?? 0
+          if (selectionStart === userTypedValue.length && inputValue !== userTypedValue) {
+            e.preventDefault()
+            setUserTypedValue(inputValue)
+            requestAnimationFrame(() => {
+              inputRef.current?.setSelectionRange(inputValue.length, inputValue.length)
+            })
+          }
+          return
+        }
       }
     }
 
     if (e.key === 'Enter') {
       e.preventDefault()
       
-      // If a suggestion is selected, use it
+      // If a suggestion is selected via arrow keys, use it
       if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
         handleSelectSuggestion(suggestions[selectedIndex])
       } else {
+        // Use the full input value (includes inline autocomplete if active)
         // Shift+Enter uses Google, regular Enter uses Orbit (default)
         const searchEngine = e.shiftKey ? 'google' : 'orbit'
         performNavigation(inputValue, searchEngine)
@@ -206,11 +276,38 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
     }
   }
 
+  /**
+   * Handle input changes with inline autocomplete logic
+   */
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value
+    const selectionStart = e.target.selectionStart ?? newValue.length
+    
+    // Determine if user is typing forward or deleting
+    // If selection was at end and new value is shorter, user deleted
+    // If new value is longer or equal and caret moved forward, user typed
+    const isTypingForward = newValue.length >= userTypedValue.length && selectionStart >= userTypedValue.length
+    
+    if (isTypingForward) {
+      // User is typing forward - update typed value and enable autocomplete
+      setUserTypedValue(newValue)
+      setEnableInlineAutocomplete(true)
+    } else {
+      // User deleted something - disable inline autocomplete, show exactly what they typed
+      setUserTypedValue(newValue)
+      setInputValue(newValue)
+      setEnableInlineAutocomplete(false)
+    }
+  }
+
   const handleFocus = () => {
     setIsFocused(true)
     setSelectedIndex(-1)
     // Select all text on focus
     inputRef.current?.select()
+    // Initialize user typed value from current input
+    setUserTypedValue(inputValue)
+    setEnableInlineAutocomplete(true)
     // Query for initial suggestions (recent history)
     query(inputValue)
   }
@@ -218,6 +315,8 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
   const handleBlur = () => {
     setIsFocused(false)
     setSelectedIndex(-1)
+    // Reset inline autocomplete state
+    setEnableInlineAutocomplete(true)
     // Restore URL if input is empty
     if (!inputValue.trim() && activeTab) {
       setInputValue(activeTab.url)
@@ -305,6 +404,16 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
         </button>
       </div>
 
+      <button
+        type="button"
+        className="url-brand url-brand-button"
+        onClick={handleOrbitLogoClick}
+        title="Go to Orbit search"
+        aria-label="Go to Orbit search"
+      >
+        <img src={orbitLogo} alt="Orbit" className="url-brand-logo" />
+      </button>
+
       <div 
         ref={urlBarRef}
         className={`url-bar ${isFocused ? 'focused' : ''} ${activeTab?.isLoading ? 'loading' : ''}`}
@@ -313,30 +422,14 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
           <img src={activeTab.favicon} alt="" className="url-favicon" />
         )}
         {!activeTab?.favicon && !isFocused && (
-          <div className="url-icon">
-            {activeTab?.url.startsWith('orbit://') ? (
-              <svg viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="8" cy="8" r="2" fill="currentColor" />
-              </svg>
-            ) : activeTab?.url.startsWith('https://') ? (
-              <svg viewBox="0 0 16 16" fill="none">
-                <rect x="3" y="7" width="10" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            )}
-          </div>
+          <img src={orbitLogo} alt="" className="url-favicon" />
         )}
         <input
           ref={inputRef}
           type="text"
           className="url-input"
           value={displayUrl}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onFocus={handleFocus}
           onBlur={handleBlur}
@@ -344,7 +437,7 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
           spellCheck={false}
           role="combobox"
           aria-expanded={showDropdown}
-          aria-autocomplete="list"
+          aria-autocomplete="both"
           aria-controls="autocomplete-dropdown"
         />
         {activeTab?.isLoading && (

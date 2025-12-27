@@ -228,8 +228,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Disable pointer events so clicks go through to the WebContentsView */
-  pointer-events: none;
+  /* pointer-events controlled dynamically via inline style for attention system */
 }
 
 .browser-loading-state {

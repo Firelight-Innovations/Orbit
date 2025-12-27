@@ -7,4 +7,4 @@
 - [] Create extension UI (pull from chromium)
 - [] Create settings UI (pull from chromium)
 - [] Create chatbox for Fi
-- [] Create UI + AI wrapper for Google
+- [] Create UI + AI wrapper for Google (Fi Search)

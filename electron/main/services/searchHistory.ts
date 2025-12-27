@@ -298,7 +298,7 @@ export class SearchHistoryService {
     // Generate search action suggestions for non-URL queries
     const searchActions: AutocompleteSuggestion[] = []
     if (input.trim() && !this.isLikelyUrl(input)) {
-      // Add "Search with Orbit" action (default)
+      // Add Orbit action (default)
       searchActions.push({
         id: -1,
         type: 'search-action',
@@ -307,7 +307,8 @@ export class SearchHistoryService {
         favicon: null,
         visitCount: 0,
         searchEngine: 'orbit',
-        actionLabel: 'Search Orbit'
+        actionLabel: 'Search with Fi',
+        shortcut: 'Enter'
       })
       
       // Add "Search Google" action (secondary)

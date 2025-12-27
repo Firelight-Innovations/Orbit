@@ -18,6 +18,44 @@
   gap: 2px;
 }
 
+.url-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  animation: none;
+}
+
+.url-brand-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.url-brand-button:hover {
+  background: var(--bg-hover);
+}
+
+.url-brand-button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.url-brand-logo {
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
 .nav-btn {
   display: flex;
   align-items: center;
@@ -139,7 +177,14 @@
   color: var(--text-muted);
 }
 
+/* Inline autocomplete: selected text appears as muted/greyed out suggestion */
 .url-input::selection {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+/* When not focused, use normal selection colors */
+.url-bar:not(.focused) .url-input::selection {
   background: var(--accent-primary);
   color: white;
 }

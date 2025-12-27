@@ -75,6 +75,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Tab view visibility (for autocomplete dropdown overlay)
   setTabViewVisible: (visible: boolean) => ipcRenderer.invoke('tabs:setViewVisible', visible),
 
+  // UI view mouse event control (for click-through to web content)
+  setUIIgnoreMouseEvents: (ignore: boolean) => ipcRenderer.send('ui:setIgnoreMouseEvents', ignore),
+
   // Tab state updates from main process
   onTabsUpdated: (callback: (state: WindowState) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, state: WindowState) => callback(state)
@@ -136,6 +139,7 @@ declare global {
       reload: (tabId: string) => Promise<boolean>
       stop: (tabId: string) => Promise<boolean>
       setTabViewVisible: (visible: boolean) => Promise<void>
+      setUIIgnoreMouseEvents: (ignore: boolean) => void
       onTabsUpdated: (callback: (state: WindowState) => void) => () => void
       getAllWindows: () => Promise<Array<{ id: number; bounds: { x: number; y: number; width: number; height: number } }>>
       getApiPort: () => Promise<number | null>

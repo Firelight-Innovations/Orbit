@@ -73,6 +73,32 @@ function updateTabViewBounds(window: BrowserWindow, view: WebContentsView): void
   })
 }
 
+// Toggle UI view between fullscreen (covers whole window) and header-only mode
+// When header-only, clicks in content area go directly to the tab view below
+function setUIViewFullscreen(window: BrowserWindow, fullscreen: boolean): void {
+  const uiView = uiViews.get(window.id)
+  if (!uiView) return
+
+  const bounds = window.getContentBounds()
+  if (fullscreen) {
+    // UI covers full window - captures all clicks
+    uiView.setBounds({
+      x: 0,
+      y: 0,
+      width: bounds.width,
+      height: bounds.height
+    })
+  } else {
+    // UI covers only header - clicks in content area go to tab view
+    uiView.setBounds({
+      x: 0,
+      y: 0,
+      width: bounds.width,
+      height: HEADER_HEIGHT
+    })
+  }
+}
+
 // Reorder views so UI is always on top
 function bringUIToFront(window: BrowserWindow): void {
   const uiView = uiViews.get(window.id)
@@ -476,6 +502,9 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
     if (activeTab && !isInternalUrl(activeTab.url)) {
       showTabView(mainWindow, activeTabId)
     }
+
+    // Open DevTools on launch so a debugging console is always available
+    uiView.webContents.openDevTools({ mode: 'detach' })
   })
 
   // Watch shortcuts for dev tools
@@ -529,7 +558,6 @@ export {
   windowStates,
   createWindowWithTabs,
   tabViews,
-  uiViews,
   createTabView,
   destroyTabView,
   showTabView,
@@ -537,6 +565,7 @@ export {
   isInternalUrl,
   normalizeUrl,
   broadcastTabUpdate,
+  setUIViewFullscreen,
   HEADER_HEIGHT
 }
 export type { TabInfo, WindowState }

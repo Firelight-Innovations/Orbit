@@ -9,7 +9,8 @@ import {
   hideAllTabViews,
   isInternalUrl,
   normalizeUrl,
-  broadcastTabUpdate
+  broadcastTabUpdate,
+  setUIViewFullscreen
 } from './index'
 import { getSearchHistoryService } from './services/searchHistory'
 
@@ -41,6 +42,17 @@ export function setupIpcHandlers(
   ipcMain.handle('window:isMaximized', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     return window?.isMaximized() ?? false
+  })
+
+  // UI view size control - for click-through to web content
+  // When web content has attention, shrink UI view to header only so clicks reach tab view
+  ipcMain.on('ui:setIgnoreMouseEvents', (event, ignore: boolean) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) return
+
+    // When ignore=true, shrink UI to header only (web content gets clicks)
+    // When ignore=false, expand UI to full window (UI captures all clicks)
+    setUIViewFullscreen(window, !ignore)
   })
 
   // Tab management handlers

@@ -1,6 +1,7 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { createPortal } from 'react-dom'
 import type { AutocompleteSuggestion } from '../../hooks/useSearchHistory'
+import orbitLogo from '../../assets/orbit_logo.png'
 import './AutocompleteDropdown.css'
 
 interface AutocompleteDropdownProps {
@@ -80,22 +81,16 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
         // Google "G" icon
         return (
           <svg viewBox="0 0 16 16" fill="none" className="suggestion-icon google-icon">
-            <path d="M8 3.5c1.25 0 2.38.47 3.25 1.25l2.37-2.37C12.13 1.02 10.17 0 8 0 4.87 0 2.17 1.73.82 4.27l2.75 2.13C4.22 4.53 5.92 3.5 8 3.5z" fill="#EA4335"/>
-            <path d="M15.5 8.18c0-.65-.06-1.28-.17-1.88H8v3.56h4.21c-.18.97-.73 1.79-1.56 2.34l2.52 1.96c1.48-1.36 2.33-3.37 2.33-5.98z" fill="#4285F4"/>
-            <path d="M3.57 9.6c-.22-.65-.35-1.34-.35-2.06s.13-1.41.35-2.06L.82 3.35C.3 4.39 0 5.55 0 6.8s.3 2.41.82 3.45l2.75-2.13z" fill="#FBBC05"/>
-            <path d="M8 13.5c-2.08 0-3.78-1.03-4.43-2.53l-2.75 2.13C2.17 15.27 4.87 17 8 17c2.17 0 4.13-1.02 5.62-2.62l-2.52-1.96c-.87.58-1.96.92-3.1.92z" fill="#34A853"/>
+            <path d="M8 3.5c1.25 0 2.38.47 3.25 1.25l2.37-2.37C12.13 1.02 10.17 0 8 0 4.87 0 2.17 1.73.82 4.27l2.75 2.13C4.22 4.53 5.92 3.5 8 3.5z" fill="#EA4335" />
+            <path d="M15.5 8.18c0-.65-.06-1.28-.17-1.88H8v3.56h4.21c-.18.97-.73 1.79-1.56 2.34l2.52 1.96c1.48-1.36 2.33-3.37 2.33-5.98z" fill="#4285F4" />
+            <path d="M3.57 9.6c-.22-.65-.35-1.34-.35-2.06s.13-1.41.35-2.06L.82 3.35C.3 4.39 0 5.55 0 6.8s.3 2.41.82 3.45l2.75-2.13z" fill="#FBBC05" />
+            <path d="M8 13.5c-2.08 0-3.78-1.03-4.43-2.53l-2.75 2.13C2.17 15.27 4.87 17 8 17c2.17 0 4.13-1.02 5.62-2.62l-2.52-1.96c-.87.58-1.96.92-3.1.92z" fill="#34A853" />
           </svg>
         )
       }
-      
-      // Orbit icon (default)
-      return (
-        <svg viewBox="0 0 16 16" fill="none" className="suggestion-icon orbit-icon">
-          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="8" cy="8" r="2" fill="currentColor" />
-          <ellipse cx="8" cy="8" rx="6" ry="2.5" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" />
-        </svg>
-      )
+
+      // Orbit logo (default)
+      return <img src={orbitLogo} alt="Orbit" className="suggestion-icon orbit-icon-img" />
     }
 
     // Get icon for suggestion type
@@ -171,9 +166,7 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
             </span>
           </div>
 
-          {suggestion.shortcut && (
-            <span className="shortcut-hint">{suggestion.shortcut}</span>
-          )}
+          {suggestion.shortcut && <span className="shortcut-hint">{suggestion.shortcut}</span>}
 
           <div className="action-label">
             <span>{suggestion.actionLabel}</span>

@@ -70,6 +70,13 @@
   color: var(--text-muted);
 }
 
+.orbit-icon-img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+}
+
 .suggestion-icon.hidden {
   display: none;
 }
@@ -209,6 +216,12 @@
   font-weight: 500;
   flex-shrink: 0;
   padding-left: 8px;
+}
+
+.action-logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 .action-arrow {
