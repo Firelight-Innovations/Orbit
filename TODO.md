@@ -1,10 +1,10 @@
 - [*] Create electron app (with python backend) with custom top bar and ability to window (similar to chrome)
 - [] Create welcome screen + import chrome profile
-- [] Import Fi along with chromium browser
+- [*] Import Fi along with chromium browser
 - [] Move Fi to LangChain
 - [] Create tab system, render chrome instance within it
 - [] Create shortcut bar (pull from chromium)
 - [] Create extension UI (pull from chromium)
 - [] Create settings UI (pull from chromium)
 - [] Create chatbox for Fi
-- [] Create UI + AI wrapper for Google
+- [] Create UI + AI wrapper for Google (Fi Search)

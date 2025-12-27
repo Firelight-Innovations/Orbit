@@ -6,6 +6,10 @@ interface TabInfo {
   id: string
   title: string
   url: string
+  isLoading?: boolean
+  canGoBack?: boolean
+  canGoForward?: boolean
+  favicon?: string
 }
 
 interface TabContentProps {
