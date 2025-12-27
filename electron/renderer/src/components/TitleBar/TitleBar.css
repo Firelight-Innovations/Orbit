@@ -1,0 +1,72 @@
+.title-bar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.title-bar-drag-region {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+.app-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.app-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Window Controls */
+.window-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+.window-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  color: var(--text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.window-control-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.window-control-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.window-control-btn.close:hover {
+  background: var(--error);
+  color: white;
+}
+
+.window-control-btn.minimize:hover {
+  background: var(--bg-hover);
+}
+
+.window-control-btn.maximize:hover {
+  background: var(--bg-hover);
+}
+

@@ -1,0 +1,7 @@
+# agents/fi_interaction/agent.toml
+name = "fi"
+version = "0.1.0"
+runtime = "python-3.11"
+entrypoint = "agent:Agent"
+description = "The Fi browser interaction agent."
+dependencies = []

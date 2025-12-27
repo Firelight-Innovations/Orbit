@@ -1,0 +1,56 @@
+.tab-bar {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  -webkit-app-region: drag;
+}
+
+.tabs-container {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  padding: 6px 0 0 0;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 1;
+  -webkit-app-region: no-drag;
+}
+
+.tab-bar-spacer {
+  flex: 1;
+  height: 100%;
+  min-width: 20px;
+  -webkit-app-region: drag;
+}
+
+.tabs-container::-webkit-scrollbar {
+  display: none;
+}
+
+.new-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.new-tab-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.new-tab-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+

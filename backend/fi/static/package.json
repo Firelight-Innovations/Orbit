@@ -1,0 +1,12 @@
+{
+  "name": "weave-static",
+  "private": true,
+  "devDependencies": {
+    "esbuild": "^0.21.0"
+  },
+  "scripts": {
+    "build:snapshot": "node scripts/build-snapshot.js"
+  }
+}
+
+
