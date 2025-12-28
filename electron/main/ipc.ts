@@ -16,6 +16,8 @@ import { getSearchHistoryService } from './services/searchHistory'
 import { getSearchSuggestionsService } from './services/searchSuggestions'
 import * as profileService from './services/profileService'
 import * as chromeImporter from './services/chromeImporter'
+import { getBookmarksService } from './services/bookmarksService'
+import type { BookmarkCreateData, BookmarkUpdateData } from './services/bookmarksService'
 
 export function setupIpcHandlers(
   windowStates: Map<number, WindowState>,
@@ -612,6 +614,102 @@ export function setupIpcHandlers(
   ipcMain.handle('chrome:isRunning', () => {
     return chromeImporter.isChromeRunning()
   })
+
+  // Bookmarks handlers
+  ipcMain.handle('bookmarks:getBar', () => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.getBookmarksBar()
+    } catch (error) {
+      console.error('Error getting bookmarks bar:', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('bookmarks:getAllRoots', () => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.getAllRoots()
+    } catch (error) {
+      console.error('Error getting all roots:', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('bookmarks:create', (_event, parentId: string, data: BookmarkCreateData, index?: number) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.createBookmark(parentId, data, index)
+    } catch (error) {
+      console.error('Error creating bookmark:', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('bookmarks:update', (_event, id: string, updates: BookmarkUpdateData) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.updateBookmark(id, updates)
+    } catch (error) {
+      console.error('Error updating bookmark:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('bookmarks:delete', (_event, id: string) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.deleteBookmark(id)
+    } catch (error) {
+      console.error('Error deleting bookmark:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('bookmarks:move', (_event, id: string, newParentId: string, newIndex: number) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.moveBookmark(id, newParentId, newIndex)
+    } catch (error) {
+      console.error('Error moving bookmark:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('bookmarks:search', (_event, query: string, maxResults?: number) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.searchBookmarks(query, maxResults)
+    } catch (error) {
+      console.error('Error searching bookmarks:', error)
+      return []
+    }
+  })
+
+  // Setup bookmarks change listener - only once
+  try {
+    const bookmarksService = getBookmarksService()
+    
+    // Remove any existing listeners to avoid duplicates
+    bookmarksService.removeAllListeners('changed')
+    
+    // Add the broadcast listener
+    bookmarksService.on('changed', () => {
+      console.log('Bookmarks changed, broadcasting to all windows...')
+      // Broadcast to all windows
+      BrowserWindow.getAllWindows().forEach(window => {
+        try {
+          if (!window.isDestroyed()) {
+            window.webContents.send('bookmarks:changed')
+          }
+        } catch (error) {
+          console.error('Error sending bookmarks:changed to window:', error)
+        }
+      })
+    })
+  } catch (error) {
+    console.error('Error setting up bookmarks change listener:', error)
+  }
 
   // Development/testing helpers
   ipcMain.handle('profile:resetFirstLaunch', () => {

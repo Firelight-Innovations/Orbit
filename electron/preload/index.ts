@@ -74,6 +74,28 @@ export interface ChromeProfileInfo {
 
 export type ImportCategory = 'bookmarks' | 'history' | 'cookies' | 'extensions' | 'passwords' | 'preferences'
 
+export interface BookmarkNode {
+  id: string
+  name: string
+  type: 'folder' | 'url'
+  url?: string
+  date_added?: string
+  date_modified?: string
+  children?: BookmarkNode[]
+  guid?: string
+}
+
+export interface BookmarkCreateData {
+  name: string
+  url?: string
+  type: 'folder' | 'url'
+}
+
+export interface BookmarkUpdateData {
+  name?: string
+  url?: string
+}
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -195,6 +217,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     importProfile: (chromeProfilePath: string, newProfileName: string, categories?: ImportCategory[]) =>
       ipcRenderer.invoke('chrome:importProfile', chromeProfilePath, newProfileName, categories),
     isRunning: () => ipcRenderer.invoke('chrome:isRunning')
+  },
+
+  // Bookmarks
+  bookmarks: {
+    getBookmarksBar: () =>
+      ipcRenderer.invoke('bookmarks:getBar'),
+    getAllRoots: () =>
+      ipcRenderer.invoke('bookmarks:getAllRoots'),
+    createBookmark: (parentId: string, data: BookmarkCreateData, index?: number) =>
+      ipcRenderer.invoke('bookmarks:create', parentId, data, index),
+    updateBookmark: (id: string, updates: BookmarkUpdateData) =>
+      ipcRenderer.invoke('bookmarks:update', id, updates),
+    deleteBookmark: (id: string) =>
+      ipcRenderer.invoke('bookmarks:delete', id),
+    moveBookmark: (id: string, newParentId: string, newIndex: number) =>
+      ipcRenderer.invoke('bookmarks:move', id, newParentId, newIndex),
+    searchBookmarks: (query: string, maxResults?: number) =>
+      ipcRenderer.invoke('bookmarks:search', query, maxResults),
+    onBookmarksChanged: (callback: () => void) => {
+      const handler = () => callback()
+      ipcRenderer.on('bookmarks:changed', handler)
+      return () => ipcRenderer.removeListener('bookmarks:changed', handler)
+    }
   }
 })
 
@@ -270,6 +315,16 @@ declare global {
         getProfileSummary: (profilePath: string) => Promise<Record<ImportCategory, boolean> | null>
         importProfile: (chromeProfilePath: string, newProfileName: string, categories?: ImportCategory[]) => Promise<{ success: boolean; profileId?: string; error?: string }>
         isRunning: () => Promise<boolean>
+      }
+      bookmarks: {
+        getBookmarksBar: () => Promise<BookmarkNode | null>
+        getAllRoots: () => Promise<{ bookmark_bar: BookmarkNode; other: BookmarkNode; synced: BookmarkNode } | null>
+        createBookmark: (parentId: string, data: BookmarkCreateData, index?: number) => Promise<BookmarkNode | null>
+        updateBookmark: (id: string, updates: BookmarkUpdateData) => Promise<boolean>
+        deleteBookmark: (id: string) => Promise<boolean>
+        moveBookmark: (id: string, newParentId: string, newIndex: number) => Promise<boolean>
+        searchBookmarks: (query: string, maxResults?: number) => Promise<BookmarkNode[]>
+        onBookmarksChanged: (callback: () => void) => () => void
       }
     }
   }

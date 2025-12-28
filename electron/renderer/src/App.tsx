@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { TitleBar } from './components/TitleBar/TitleBar'
 import { NavigationBar } from './components/NavigationBar/NavigationBar'
+import { BookmarksBar } from './components/BookmarksBar/BookmarksBar'
 import { TabContent } from './components/Tabs/TabContent'
 import { WelcomeScreen } from './components/Welcome/WelcomeScreen'
 import { ProfilesPage } from './components/Profiles/ProfilesPage'
 import orbitLogo from './assets/orbit_logo.png'
 
-// Height of header (title bar + navigation bar) - must match HEADER_HEIGHT in main process
-const HEADER_HEIGHT = 80
+// Height of header (title bar + navigation bar + bookmarks bar) - must match HEADER_HEIGHT in main process
+const HEADER_HEIGHT = 112
 
 interface TabInfo {
   id: string
@@ -131,8 +132,11 @@ function App() {
     }
 
     // Default TabContent for other internal pages
-    return <TabContent tab={activeTab} apiPort={apiPort} />
+    return <TabContent tab={activeTab} apiPort={apiPort} onNavigate={handleNavigate} />
   }
+
+  // Show bookmarks bar on all tabs
+  const showBookmarksBar = !!activeTab
 
   // Show loading state while checking onboarding
   if (showWelcome === null) {
@@ -158,6 +162,7 @@ function App() {
     <div className="app">
       <TitleBar windowState={windowState} onStateChange={setWindowState} />
       <NavigationBar activeTab={activeTab ?? null} onNavigate={handleNavigate} />
+      {showBookmarksBar && <BookmarksBar onNavigate={handleNavigate} />}
       <main className="app-content">
         {/* Only render React content for internal pages (orbit://) */}
         {/* External pages are rendered by WebContentsView overlay from main process */}

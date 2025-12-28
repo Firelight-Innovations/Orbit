@@ -189,6 +189,34 @@
   color: white;
 }
 
+/* Star Button */
+.star-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.star-button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.star-button:active {
+  background: var(--bg-tertiary);
+}
+
+.star-button svg[fill="currentColor"] {
+  color: #f59e0b; /* Amber color for bookmarked state */
+}
+
 /* Loading Indicator */
 .loading-indicator {
   display: flex;
