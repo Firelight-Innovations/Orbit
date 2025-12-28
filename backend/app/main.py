@@ -8,7 +8,8 @@ Includes automatic OpenAPI documentation.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import api
+from app.routers import api, assistant
+from backend.ai import router as ai_router
 
 # Create FastAPI application with OpenAPI documentation
 app = FastAPI(
@@ -47,8 +48,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API router
+# Include API routers
 app.include_router(api.router, prefix="/api", tags=["API"])
+app.include_router(assistant.router, prefix="/api", tags=["Assistant"])
+app.include_router(ai_router.router, prefix="/api", tags=["AI"])
 
 
 @app.get("/", tags=["Root"])

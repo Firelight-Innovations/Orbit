@@ -5,7 +5,10 @@ import { BookmarksBar } from './components/BookmarksBar/BookmarksBar'
 import { TabContent } from './components/Tabs/TabContent'
 import { WelcomeScreen } from './components/Welcome/WelcomeScreen'
 import { ProfilesPage } from './components/Profiles/ProfilesPage'
+import { SearchPage } from './components/Search/SearchPage'
 import orbitLogo from './assets/orbit_logo.png'
+import { AssistantSidebar } from './components/Assistant/AssistantSidebar'
+import { assistantStore, useAssistantStore } from './stores/assistantStore'
 
 // Height of header (title bar + navigation bar + bookmarks bar) - must match HEADER_HEIGHT in main process
 const HEADER_HEIGHT = 112
@@ -33,6 +36,8 @@ function App() {
   
   // Attention-based focus system: when true, web content receives all mouse events
   const [webContentHasAttention, setWebContentHasAttention] = useState(false)
+  const [selectedText, setSelectedText] = useState<string | null>(null)
+  const isAssistantOpen = useAssistantStore((s) => s.isOpen)
 
   useEffect(() => {
     // Check if onboarding is complete
@@ -48,6 +53,20 @@ function App() {
     })
 
     return unsubscribe
+  }, [])
+
+  // Global shortcut for assistant (Ctrl/Cmd + K)
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const isCmdK = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k'
+      if (isCmdK) {
+        event.preventDefault()
+        assistantStore.toggle()
+      }
+    }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
   }, [])
 
   const checkOnboardingStatus = async () => {
@@ -103,6 +122,21 @@ function App() {
     window.electronAPI.setUIIgnoreMouseEvents(false)
   }, [activeTab?.id, isInternalPage])
 
+  // Capture selected text via context menu to share with assistant
+  useEffect(() => {
+    const handleContextMenu = () => {
+      const selection = window.getSelection()?.toString().trim()
+      setSelectedText(selection || null)
+      assistantStore.setPageContext({
+        url: activeTab?.url ?? null,
+        selectedText: selection || null
+      })
+    }
+
+    window.addEventListener('contextmenu', handleContextMenu)
+    return () => window.removeEventListener('contextmenu', handleContextMenu)
+  }, [activeTab?.url])
+
   // Handle navigation from the URL bar
   const handleNavigate = (url: string) => {
     if (activeTab) {
@@ -127,6 +161,10 @@ function App() {
     const url = activeTab.url
 
     // Handle different internal pages
+    if (url.startsWith('orbit://search')) {
+      return <SearchPage />
+    }
+
     if (url.startsWith('orbit://profiles')) {
       return <ProfilesPage onNavigate={handleNavigate} />
     }
@@ -163,26 +201,41 @@ function App() {
       <TitleBar windowState={windowState} onStateChange={setWindowState} />
       <NavigationBar activeTab={activeTab ?? null} onNavigate={handleNavigate} />
       {showBookmarksBar && <BookmarksBar onNavigate={handleNavigate} />}
-      <main className="app-content">
-        {/* Only render React content for internal pages (orbit://) */}
-        {/* External pages are rendered by WebContentsView overlay from main process */}
-        {isInternalPage ? (
-          renderContent()
-        ) : (
-          // Placeholder for external pages - WebContentsView renders behind
-          // Click to give attention to web content, then pointer-events: none to let clicks through
-          <div 
-            className="browser-view-placeholder"
-            onClick={handleContentClick}
-            style={{ pointerEvents: webContentHasAttention ? 'none' : 'auto', cursor: webContentHasAttention ? 'default' : 'pointer' }}
-          >
-            {activeTab?.isLoading && (
-              <div className="browser-loading-state">
-                <div className="browser-loading-spinner" />
-                <p>Loading {activeTab.url}...</p>
-              </div>
-            )}
-          </div>
+      <main className="app-content flex">
+        <div
+          className="flex-1"
+          style={{
+            width: isAssistantOpen ? 'calc(100% - 420px)' : '100%',
+            transition: 'width 180ms ease'
+          }}
+        >
+          {/* Only render React content for internal pages (orbit://) */}
+          {/* External pages are rendered by WebContentsView overlay from main process */}
+          {isInternalPage ? (
+            renderContent()
+          ) : (
+            // Placeholder for external pages - WebContentsView renders behind
+            // Click to give attention to web content, then pointer-events: none to let clicks through
+            <div 
+              className="browser-view-placeholder h-full"
+              onClick={handleContentClick}
+              style={{ pointerEvents: webContentHasAttention ? 'none' : 'auto', cursor: webContentHasAttention ? 'default' : 'pointer' }}
+            >
+              {activeTab?.isLoading && (
+                <div className="browser-loading-state">
+                  <div className="browser-loading-spinner" />
+                  <p>Loading {activeTab.url}...</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {isAssistantOpen && (
+          <AssistantSidebar
+            activeUrl={activeTab?.url ?? null}
+            selectedText={selectedText}
+            topOffset={HEADER_HEIGHT}
+          />
         )}
       </main>
     </div>

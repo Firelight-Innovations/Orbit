@@ -14,6 +14,7 @@ import {
 } from './index'
 import { getSearchHistoryService } from './services/searchHistory'
 import { getSearchSuggestionsService } from './services/searchSuggestions'
+import { getAISearchService } from './services/aiSearchService'
 import * as profileService from './services/profileService'
 import * as chromeImporter from './services/chromeImporter'
 import { getBookmarksService } from './services/bookmarksService'
@@ -716,4 +717,68 @@ export function setupIpcHandlers(
     profileService.resetFirstLaunch()
     return true
   })
+
+  // AI Search handler
+  ipcMain.handle('aiSearch:run', async (_event, query: string) => {
+    try {
+      const aiSearchService = await getAISearchService()
+      return await aiSearchService.search(query)
+    } catch (error) {
+      console.error('Error running AI search:', error)
+      return {
+        query,
+        aiOverview: null,
+        results: [],
+        cached: false,
+        timestamp: Date.now(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  // Assistant chat handler
+  ipcMain.handle(
+    'assistant:sendMessage',
+    async (
+      event,
+      payload: { message: string; pageContext?: { url?: string | null; selectedText?: string | null } }
+    ) => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const baseUrl = pythonBackend?.getBaseUrl()
+
+      if (!baseUrl) {
+        return { error: 'Backend not available' }
+      }
+
+      const state = window ? windowStates.get(window.id) : null
+      const activeTab = state?.tabs.find((t) => t.id === state.activeTabId)
+      const pageContext = {
+        url: payload.pageContext?.url ?? activeTab?.url ?? null,
+        selected_text: payload.pageContext?.selectedText ?? null
+      }
+
+      try {
+        const response = await fetch(`${baseUrl}/api/assistant/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: payload.message,
+            page_context: pageContext
+          })
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          return { error: errorText || 'Assistant request failed' }
+        }
+
+        return await response.json()
+      } catch (error) {
+        console.error('Assistant request failed:', error)
+        return { error: error instanceof Error ? error.message : 'Unknown error' }
+      }
+    }
+  )
 }

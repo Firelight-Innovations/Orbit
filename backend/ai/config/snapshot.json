@@ -1,0 +1,14 @@
+{
+  "include": {
+    "landmarks": true,
+    "inputs": true,
+    "buttons": true,
+    "links": true,
+    "selects": true
+  },
+  "reference_assignment": {
+    "start_counter_at": 1,
+    "strategy": "sequential"
+  }
+}
+

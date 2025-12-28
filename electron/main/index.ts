@@ -5,6 +5,10 @@ import { setupIpcHandlers } from './ipc'
 import { PythonBackend } from './python'
 import { closeSearchHistoryService, getSearchHistoryService } from './services/searchHistory'
 import { closeSearchSuggestionsService } from './services/searchSuggestions'
+import { closeAISearchService } from './services/aiSearchService'
+
+// Enable remote debugging on a fixed port so Playwright can attach
+app.commandLine.appendSwitch('remote-debugging-port', '9222')
 
 // Get the app icon path
 const iconPath = join(__dirname, '../../resources/orbit_logo.png')
@@ -37,6 +41,7 @@ const windowTabViews = new Map<number, Set<string>>()
 // Map of windowId -> UI WebContentsView (the React app)
 const uiViews = new Map<number, WebContentsView>()
 let pythonBackend: PythonBackend | null = null
+let debuggingPort: number | null = 9222
 
 // Helper to check if URL is internal (orbit://) or external (http/https)
 function isInternalUrl(url: string): boolean {
@@ -523,6 +528,8 @@ app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.orbit.app')
 
+  console.log(`Remote debugging enabled on port ${debuggingPort}`)
+
   // Start Python backend
   pythonBackend = new PythonBackend()
   await pythonBackend.start()
@@ -552,10 +559,18 @@ app.on('window-all-closed', async () => {
   // Close search suggestions service
   closeSearchSuggestionsService()
 
+  // Close AI search service
+  closeAISearchService()
+
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
+
+// Export debugging port getter
+export function getDebuggingPort(): number | null {
+  return debuggingPort
+}
 
 // Export for IPC access
 export {

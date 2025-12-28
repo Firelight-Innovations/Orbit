@@ -3,11 +3,12 @@ import { useSearchHistory, type AutocompleteSuggestion } from '../../hooks/useSe
 import { AutocompleteDropdown, type AutocompleteDropdownRef } from './AutocompleteDropdown'
 import { ProfileButton } from './ProfileButton'
 import { buildSearchUrl } from '../../config/searchEngines'
-import { Star } from 'lucide-react'
+import { Sparkles, Star } from 'lucide-react'
 import { EditBookmarkDialog } from '../BookmarksBar/EditBookmarkDialog'
 import { BookmarkNode } from '@/../../preload/index'
 import orbitLogo from '../../assets/orbit_logo.png'
 import './NavigationBar.css'
+import { assistantStore } from '@/stores/assistantStore'
 
 interface TabInfo {
   id: string
@@ -585,8 +586,15 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
         )}
       </div>
 
-      {/* Profile Button */}
+      {/* Profile Button + Assistant */}
       <div className="profile-button-container">
+        <button
+          className="nav-btn"
+          onClick={() => assistantStore.toggle()}
+          title="Open assistant (Ctrl/Cmd+K)"
+        >
+          <Sparkles size={16} />
+        </button>
         <ProfileButton onNavigate={onNavigate} />
       </div>
 

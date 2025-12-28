@@ -176,6 +176,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('fiSuggestions:get', query)
   },
 
+  // AI Search
+  aiSearch: {
+    run: (query: string) => ipcRenderer.invoke('aiSearch:run', query)
+  },
+
+  // Assistant
+  assistant: {
+    sendMessage: (
+      message: string,
+      pageContext?: { url?: string | null; selectedText?: string | null }
+    ) =>
+      ipcRenderer.invoke('assistant:sendMessage', {
+        message,
+        pageContext
+      })
+  },
+
   // Profile Management
   profile: {
     isFirstLaunch: () => ipcRenderer.invoke('profile:isFirstLaunch'),
@@ -294,6 +311,34 @@ declare global {
       }
       fiSuggestions: {
         get: (query: string) => Promise<FiSuggestion[]>
+      }
+      aiSearch: {
+        run: (query: string) => Promise<{
+          query: string
+          aiOverview: { content: string; sources: Array<{ title: string; url: string }> } | null
+          results: Array<{
+            title: string
+            snippet: string
+            url: string
+            source: 'google' | 'bing' | 'duckduckgo'
+            rank: number
+            faviconUrl: string | null
+            positionInSource: number
+          }>
+          cached: boolean
+          timestamp: number
+          error?: string
+        }>
+      }
+      assistant: {
+        sendMessage: (
+          message: string,
+          pageContext?: { url?: string | null; selectedText?: string | null }
+        ) => Promise<{
+          response?: string
+          took_ms?: number
+          error?: string
+        }>
       }
       profile: {
         isFirstLaunch: () => Promise<boolean>
