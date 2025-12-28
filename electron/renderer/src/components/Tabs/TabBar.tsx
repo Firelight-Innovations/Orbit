@@ -33,7 +33,7 @@ export function TabBar({ windowState, onStateChange }: TabBarProps) {
     const newTab: TabInfo = {
       id: `tab-${Date.now()}`,
       title: 'New Tab',
-      url: 'orbit://home'
+      url: 'orbit://newtab'
     }
     const state = await window.electronAPI.createTab(newTab)
     onStateChange(state)

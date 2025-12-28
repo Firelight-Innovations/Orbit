@@ -32,6 +32,11 @@ export default defineConfig({
         }
       }
     },
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, 'electron/renderer/src')
+      }
+    },
     plugins: [react()]
   }
 })

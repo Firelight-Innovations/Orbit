@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import { useSearchHistory, type AutocompleteSuggestion } from '../../hooks/useSearchHistory'
 import { AutocompleteDropdown, type AutocompleteDropdownRef } from './AutocompleteDropdown'
+import { ProfileButton } from './ProfileButton'
 import { buildSearchUrl } from '../../config/searchEngines'
+import { Star } from 'lucide-react'
+import { EditBookmarkDialog } from '../BookmarksBar/EditBookmarkDialog'
+import { BookmarkNode } from '@/../../preload/index'
 import orbitLogo from '../../assets/orbit_logo.png'
 import './NavigationBar.css'
 
@@ -30,6 +34,10 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
   const [userTypedValue, setUserTypedValue] = useState('')
   // Track if we should apply inline autocomplete (disabled during deletion)
   const [enableInlineAutocomplete, setEnableInlineAutocomplete] = useState(true)
+  // Bookmark state
+  const [isBookmarked, setIsBookmarked] = useState(false)
+  const [existingBookmark, setExistingBookmark] = useState<BookmarkNode | null>(null)
+  const [showBookmarkDialog, setShowBookmarkDialog] = useState(false)
   
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<AutocompleteDropdownRef>(null)
@@ -49,6 +57,56 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
       setInputValue(activeTab.url)
     }
   }, [activeTab?.url, isFocused])
+
+  // Check if current page is bookmarked
+  useEffect(() => {
+    if (!activeTab || activeTab.url.startsWith('orbit://')) {
+      setIsBookmarked(false)
+      setExistingBookmark(null)
+      return
+    }
+
+    checkIfBookmarked(activeTab.url)
+  }, [activeTab?.url])
+
+  const checkIfBookmarked = async (url: string) => {
+    try {
+      const roots = await window.electronAPI.bookmarks.getAllRoots()
+      if (!roots) {
+        setIsBookmarked(false)
+        return
+      }
+
+      // Search all bookmarks for this URL
+      const findBookmark = (node: BookmarkNode): BookmarkNode | null => {
+        if (node.type === 'url' && node.url === url) {
+          return node
+        }
+        if (node.children) {
+          for (const child of node.children) {
+            const found = findBookmark(child)
+            if (found) return found
+          }
+        }
+        return null
+      }
+
+      const bookmark = findBookmark(roots.bookmark_bar) || 
+                       findBookmark(roots.other) || 
+                       findBookmark(roots.synced)
+
+      if (bookmark) {
+        setIsBookmarked(true)
+        setExistingBookmark(bookmark)
+      } else {
+        setIsBookmarked(false)
+        setExistingBookmark(null)
+      }
+    } catch (error) {
+      console.error('Failed to check if bookmarked:', error)
+      setIsBookmarked(false)
+    }
+  }
 
   // Query suggestions when user types and focused
   useEffect(() => {
@@ -331,6 +389,58 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
     }
   }
 
+  const handleStarClick = () => {
+    if (!activeTab || activeTab.url.startsWith('orbit://')) return
+
+    if (isBookmarked && existingBookmark) {
+      // Edit existing bookmark
+      setShowBookmarkDialog(true)
+    } else {
+      // Create new bookmark
+      createBookmark()
+    }
+  }
+
+  const createBookmark = async () => {
+    if (!activeTab) return
+
+    try {
+      const roots = await window.electronAPI.bookmarks.getAllRoots()
+      if (!roots) return
+
+      const bookmarkBarId = roots.bookmark_bar.id
+
+      await window.electronAPI.bookmarks.createBookmark(bookmarkBarId, {
+        name: activeTab.title || 'Untitled',
+        url: activeTab.url,
+        type: 'url'
+      })
+
+      // Refresh bookmark status
+      await checkIfBookmarked(activeTab.url)
+    } catch (error) {
+      console.error('Failed to create bookmark:', error)
+    }
+  }
+
+  const handleSaveBookmark = async (id: string, updates: any) => {
+    await window.electronAPI.bookmarks.updateBookmark(id, updates)
+    if (activeTab) {
+      await checkIfBookmarked(activeTab.url)
+    }
+  }
+
+  const handleDeleteBookmark = async () => {
+    if (existingBookmark) {
+      if (confirm(`Remove bookmark "${existingBookmark.name}"?`)) {
+        await window.electronAPI.bookmarks.deleteBookmark(existingBookmark.id)
+        setIsBookmarked(false)
+        setExistingBookmark(null)
+        setShowBookmarkDialog(false)
+      }
+    }
+  }
+
   // Display URL without protocol for cleaner look (only when not focused)
   const displayUrl = isFocused ? inputValue : formatDisplayUrl(inputValue)
 
@@ -440,6 +550,21 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
           aria-autocomplete="both"
           aria-controls="autocomplete-dropdown"
         />
+        {/* Star Button - only show for external pages */}
+        {activeTab && !activeTab.url.startsWith('orbit://') && !activeTab.isLoading && (
+          <button
+            className="star-button"
+            onClick={handleStarClick}
+            title={isBookmarked ? 'Edit bookmark' : 'Bookmark this page'}
+          >
+            <Star
+              size={16}
+              fill={isBookmarked ? 'currentColor' : 'none'}
+              strokeWidth={2}
+            />
+          </button>
+        )}
+
         {activeTab?.isLoading && (
           <div className="loading-indicator">
             <div className="loading-spinner" />
@@ -459,6 +584,21 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
           />
         )}
       </div>
+
+      {/* Profile Button */}
+      <div className="profile-button-container">
+        <ProfileButton onNavigate={onNavigate} />
+      </div>
+
+      {/* Bookmark Edit Dialog */}
+      {existingBookmark && (
+        <EditBookmarkDialog
+          bookmark={existingBookmark}
+          isOpen={showBookmarkDialog}
+          onClose={() => setShowBookmarkDialog(false)}
+          onSave={handleSaveBookmark}
+        />
+      )}
     </div>
   )
 }

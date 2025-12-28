@@ -14,6 +14,10 @@ import {
 } from './index'
 import { getSearchHistoryService } from './services/searchHistory'
 import { getSearchSuggestionsService } from './services/searchSuggestions'
+import * as profileService from './services/profileService'
+import * as chromeImporter from './services/chromeImporter'
+import { getBookmarksService } from './services/bookmarksService'
+import type { BookmarkCreateData, BookmarkUpdateData } from './services/bookmarksService'
 
 export function setupIpcHandlers(
   windowStates: Map<number, WindowState>,
@@ -465,5 +469,251 @@ export function setupIpcHandlers(
       console.error('Error fetching Fi suggestions:', error)
       return []
     }
+  })
+
+  // Profile Management handlers
+  ipcMain.handle('profile:isFirstLaunch', () => {
+    return profileService.isFirstLaunch()
+  })
+
+  ipcMain.handle('profile:isOnboardingComplete', () => {
+    return profileService.isOnboardingComplete()
+  })
+
+  ipcMain.handle('profile:completeOnboarding', () => {
+    profileService.completeOnboarding()
+    return true
+  })
+
+  ipcMain.handle('profile:getProfiles', () => {
+    return profileService.getProfiles()
+  })
+
+  ipcMain.handle('profile:getActiveProfile', () => {
+    return profileService.getActiveProfile()
+  })
+
+  ipcMain.handle('profile:getActiveProfileId', () => {
+    return profileService.getActiveProfileId()
+  })
+
+  ipcMain.handle('profile:createProfile', (event, name: string, color?: string, avatar?: string) => {
+    const profile = profileService.createProfile(
+      name,
+      (color as profileService.ProfileColor) || profileService.PROFILE_COLORS[0],
+      avatar
+    )
+    
+    // Broadcast profile list update to all windows
+    const allProfiles = profileService.getProfiles()
+    BrowserWindow.getAllWindows().forEach(window => {
+      window.webContents.send('profiles:updated', allProfiles)
+    })
+    
+    return profile
+  })
+
+  ipcMain.handle('profile:updateProfile', (event, profileId: string, updates: Partial<profileService.OrbitProfile>) => {
+    const result = profileService.updateProfile(profileId, updates)
+    
+    // Broadcast profile list update to all windows
+    const allProfiles = profileService.getProfiles()
+    BrowserWindow.getAllWindows().forEach(window => {
+      window.webContents.send('profiles:updated', allProfiles)
+    })
+    
+    // If this is the active profile, also broadcast active profile change
+    const activeProfileId = profileService.getActiveProfileId()
+    if (activeProfileId === profileId) {
+      const activeProfile = profileService.getActiveProfile()
+      BrowserWindow.getAllWindows().forEach(window => {
+        window.webContents.send('profile:changed', activeProfile)
+      })
+    }
+    
+    return result
+  })
+
+  ipcMain.handle('profile:deleteProfile', (event, profileId: string) => {
+    const result = profileService.deleteProfile(profileId)
+    
+    // Broadcast profile list update to all windows
+    if (result) {
+      const allProfiles = profileService.getProfiles()
+      BrowserWindow.getAllWindows().forEach(window => {
+        window.webContents.send('profiles:updated', allProfiles)
+      })
+    }
+    
+    return result
+  })
+
+  ipcMain.handle('profile:setActiveProfile', (event, profileId: string) => {
+    const result = profileService.setActiveProfile(profileId)
+    
+    // Broadcast profile change to all windows
+    if (result) {
+      const activeProfile = profileService.getActiveProfile()
+      BrowserWindow.getAllWindows().forEach(window => {
+        window.webContents.send('profile:changed', activeProfile)
+      })
+    }
+    
+    return result
+  })
+
+  ipcMain.handle('profile:getProfileColors', () => {
+    return profileService.PROFILE_COLORS
+  })
+
+  // Chrome Import handlers
+  ipcMain.handle('chrome:isInstalled', () => {
+    return chromeImporter.isChromeInstalled()
+  })
+
+  ipcMain.handle('chrome:detectProfiles', () => {
+    return chromeImporter.detectChromeProfiles()
+  })
+
+  ipcMain.handle('chrome:getProfileSummary', (_event, profilePath: string) => {
+    const profiles = chromeImporter.detectChromeProfiles()
+    const profile = profiles.find(p => p.path === profilePath)
+    if (!profile) return null
+    return chromeImporter.getProfileDataSummary(profile)
+  })
+
+  ipcMain.handle('chrome:importProfile', async (event, chromeProfilePath: string, newProfileName: string, categories?: string[]) => {
+    const profiles = chromeImporter.detectChromeProfiles()
+    const chromeProfile = profiles.find(p => p.path === chromeProfilePath)
+    
+    if (!chromeProfile) {
+      return { success: false, error: 'Chrome profile not found' }
+    }
+
+    const importCategories = categories as chromeImporter.ImportCategory[] | undefined
+
+    // Note: Progress callback would need WebSocket or similar for real-time updates
+    // For now, we'll do the import synchronously
+    const result = await chromeImporter.importChromeProfile(
+      chromeProfile,
+      newProfileName,
+      importCategories
+    )
+    
+    // Broadcast profile list update to all windows after successful import
+    if (result.success) {
+      const allProfiles = profileService.getProfiles()
+      BrowserWindow.getAllWindows().forEach(window => {
+        window.webContents.send('profiles:updated', allProfiles)
+      })
+    }
+    
+    return result
+  })
+
+  ipcMain.handle('chrome:isRunning', () => {
+    return chromeImporter.isChromeRunning()
+  })
+
+  // Bookmarks handlers
+  ipcMain.handle('bookmarks:getBar', () => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.getBookmarksBar()
+    } catch (error) {
+      console.error('Error getting bookmarks bar:', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('bookmarks:getAllRoots', () => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.getAllRoots()
+    } catch (error) {
+      console.error('Error getting all roots:', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('bookmarks:create', (_event, parentId: string, data: BookmarkCreateData, index?: number) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.createBookmark(parentId, data, index)
+    } catch (error) {
+      console.error('Error creating bookmark:', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('bookmarks:update', (_event, id: string, updates: BookmarkUpdateData) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.updateBookmark(id, updates)
+    } catch (error) {
+      console.error('Error updating bookmark:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('bookmarks:delete', (_event, id: string) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.deleteBookmark(id)
+    } catch (error) {
+      console.error('Error deleting bookmark:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('bookmarks:move', (_event, id: string, newParentId: string, newIndex: number) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.moveBookmark(id, newParentId, newIndex)
+    } catch (error) {
+      console.error('Error moving bookmark:', error)
+      return false
+    }
+  })
+
+  ipcMain.handle('bookmarks:search', (_event, query: string, maxResults?: number) => {
+    try {
+      const bookmarksService = getBookmarksService()
+      return bookmarksService.searchBookmarks(query, maxResults)
+    } catch (error) {
+      console.error('Error searching bookmarks:', error)
+      return []
+    }
+  })
+
+  // Setup bookmarks change listener - only once
+  try {
+    const bookmarksService = getBookmarksService()
+    
+    // Remove any existing listeners to avoid duplicates
+    bookmarksService.removeAllListeners('changed')
+    
+    // Add the broadcast listener
+    bookmarksService.on('changed', () => {
+      console.log('Bookmarks changed, broadcasting to all windows...')
+      // Broadcast to all windows
+      BrowserWindow.getAllWindows().forEach(window => {
+        try {
+          if (!window.isDestroyed()) {
+            window.webContents.send('bookmarks:changed')
+          }
+        } catch (error) {
+          console.error('Error sending bookmarks:changed to window:', error)
+        }
+      })
+    })
+  } catch (error) {
+    console.error('Error setting up bookmarks change listener:', error)
+  }
+
+  // Development/testing helpers
+  ipcMain.handle('profile:resetFirstLaunch', () => {
+    profileService.resetFirstLaunch()
+    return true
   })
 }

@@ -26,8 +26,8 @@ interface WindowState {
   activeTabId: string | null
 }
 
-// Height of title bar + navigation bar in pixels
-const HEADER_HEIGHT = 80
+// Height of title bar + navigation bar + bookmarks bar in pixels
+const HEADER_HEIGHT = 112
 
 const windowStates = new Map<number, WindowState>()
 // Map of tabId -> WebContentsView for each browser tab
@@ -435,7 +435,7 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
   const defaultTab: TabInfo = {
     id: `tab-${Date.now()}`,
     title: 'New Tab',
-    url: 'orbit://home',
+    url: 'orbit://newtab',
     isLoading: false,
     canGoBack: false,
     canGoForward: false

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import './TabContent.css'
 import orbitLogo from '../../assets/orbit_logo.png'
+import { NewTabPage } from '../NewTab/NewTabPage'
+import { BookmarksManagerPage } from '../Bookmarks/BookmarksManagerPage'
 
 interface TabInfo {
   id: string
@@ -15,6 +17,7 @@ interface TabInfo {
 interface TabContentProps {
   tab: TabInfo
   apiPort: number | null
+  onNavigate: (url: string) => void
 }
 
 interface ApiStatus {
@@ -24,7 +27,7 @@ interface ApiStatus {
   docs_url: string
 }
 
-export function TabContent({ tab, apiPort }: TabContentProps) {
+export function TabContent({ tab, apiPort, onNavigate }: TabContentProps) {
   const [apiStatus, setApiStatus] = useState<ApiStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,6 +49,16 @@ export function TabContent({ tab, apiPort }: TabContentProps) {
         })
     }
   }, [tab.url, apiPort])
+
+  // New Tab Page
+  if (tab.url === 'orbit://newtab') {
+    return <NewTabPage onNavigate={onNavigate} />
+  }
+
+  // Bookmarks Manager
+  if (tab.url === 'orbit://bookmarks') {
+    return <BookmarksManagerPage onNavigate={onNavigate} />
+  }
 
   if (tab.url === 'orbit://home') {
     return (
