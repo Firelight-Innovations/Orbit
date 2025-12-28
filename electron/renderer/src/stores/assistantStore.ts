@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 export type AssistantRole = 'user' | 'assistant'
 export type AssistantMode = 'ask' | 'agent' | 'plan'
-export type AssistantTab = 'chat' | 'workflows' | 'agents'
+export type AssistantTab = 'chat' | 'workflows'
 
 export interface AssistantMessage {
   id: string
