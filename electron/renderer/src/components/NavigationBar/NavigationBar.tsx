@@ -538,7 +538,7 @@ export function NavigationBar({ activeTab, onNavigate }: NavigationBarProps) {
         <input
           ref={inputRef}
           type="text"
-          className="url-input"
+          className="url-input !outline-none !ring-0 !border-0 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
           value={displayUrl}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
