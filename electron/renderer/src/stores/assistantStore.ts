@@ -54,9 +54,19 @@ export const assistantStore = {
     listeners.add(listener)
     return () => listeners.delete(listener)
   },
-  open: () => setState({ isOpen: true }),
-  close: () => setState({ isOpen: false }),
-  toggle: () => setState((prev) => ({ ...prev, isOpen: !prev.isOpen })),
+  open: () => {
+    setState({ isOpen: true })
+    window.electronAPI.assistant.setState(true)
+  },
+  close: () => {
+    setState({ isOpen: false })
+    window.electronAPI.assistant.setState(false)
+  },
+  toggle: () => {
+    const newState = !state.isOpen
+    setState({ isOpen: newState })
+    window.electronAPI.assistant.setState(newState)
+  },
   setPageContext: (pageContext: PageContext | null) => setState({ pageContext }),
   addMessage: (message: AssistantMessage) =>
     setState((prev) => ({ ...prev, messages: [...prev.messages, message] })),

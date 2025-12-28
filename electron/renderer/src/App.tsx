@@ -96,14 +96,17 @@ function App() {
     window.electronAPI.setUIIgnoreMouseEvents(true)
   }
 
-  // Mouse tracking to exit attention mode when mouse enters header area
+  // Mouse tracking to exit attention mode when mouse enters header area or assistant sidebar
   useEffect(() => {
     // Only track when web content has attention and on external pages
     if (!webContentHasAttention || isInternalPage) return
 
     const handleMouseMove = (e: MouseEvent) => {
-      // When mouse enters header area, remove attention from web content
-      if (e.clientY < HEADER_HEIGHT) {
+      // When mouse enters header area or assistant sidebar area, remove attention from web content
+      const inHeader = e.clientY < HEADER_HEIGHT
+      const inAssistant = isAssistantOpen && e.clientX > window.innerWidth - 420
+      
+      if (inHeader || inAssistant) {
         setWebContentHasAttention(false)
         window.electronAPI.setUIIgnoreMouseEvents(false)
       }
@@ -114,7 +117,7 @@ function App() {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
     }
-  }, [webContentHasAttention, isInternalPage])
+  }, [webContentHasAttention, isInternalPage, isAssistantOpen])
 
   // Reset attention when switching tabs or pages
   useEffect(() => {

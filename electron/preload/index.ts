@@ -190,7 +190,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('assistant:sendMessage', {
         message,
         pageContext
-      })
+      }),
+    setState: (isOpen: boolean) => ipcRenderer.invoke('assistant:setState', isOpen)
   },
 
   // Profile Management

@@ -10,7 +10,8 @@ import {
   isInternalUrl,
   normalizeUrl,
   broadcastTabUpdate,
-  setUIViewFullscreen
+  setUIViewFullscreen,
+  updateAllTabViewBounds
 } from './index'
 import { getSearchHistoryService } from './services/searchHistory'
 import { getSearchSuggestionsService } from './services/searchSuggestions'
@@ -781,4 +782,17 @@ export function setupIpcHandlers(
       }
     }
   )
+
+  // Assistant state handler
+  ipcMain.handle('assistant:setState', (event, isOpen: boolean) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) return
+
+    const state = windowStates.get(window.id)
+    if (state) {
+      state.isAssistantOpen = isOpen
+      // Update all tab view bounds to account for assistant width
+      updateAllTabViewBounds(window.id)
+    }
+  })
 }

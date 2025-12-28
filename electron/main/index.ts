@@ -28,10 +28,13 @@ interface WindowState {
   id: number
   tabs: TabInfo[]
   activeTabId: string | null
+  isAssistantOpen?: boolean
 }
 
 // Height of title bar + navigation bar + bookmarks bar in pixels
 const HEADER_HEIGHT = 112
+// Width of assistant sidebar when open
+const ASSISTANT_WIDTH = 420
 
 const windowStates = new Map<number, WindowState>()
 // Map of tabId -> WebContentsView for each browser tab
@@ -71,10 +74,14 @@ function updateUIViewBounds(window: BrowserWindow, uiView: WebContentsView): voi
 // Update bounds of a tab view to fill the content area below the header
 function updateTabViewBounds(window: BrowserWindow, view: WebContentsView): void {
   const bounds = window.getContentBounds()
+  const state = windowStates.get(window.id)
+  const isAssistantOpen = state?.isAssistantOpen ?? false
+  const contentWidth = isAssistantOpen ? bounds.width - ASSISTANT_WIDTH : bounds.width
+  
   view.setBounds({
     x: 0,
     y: HEADER_HEIGHT,
-    width: bounds.width,
+    width: contentWidth,
     height: bounds.height - HEADER_HEIGHT
   })
 }
@@ -570,6 +577,22 @@ app.on('window-all-closed', async () => {
 // Export debugging port getter
 export function getDebuggingPort(): number | null {
   return debuggingPort
+}
+
+// Update all tab view bounds for a window (called when assistant opens/closes)
+export function updateAllTabViewBounds(windowId: number): void {
+  const window = BrowserWindow.fromId(windowId)
+  if (!window) return
+
+  const windowTabs = windowTabViews.get(windowId)
+  if (windowTabs) {
+    for (const tabId of windowTabs) {
+      const view = tabViews.get(tabId)
+      if (view) {
+        updateTabViewBounds(window, view)
+      }
+    }
+  }
 }
 
 // Export for IPC access
