@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { BookmarkNode } from '@/../../preload/index'
 import { Plus } from 'lucide-react'
 import orbitLogo from '../../assets/orbit_logo.png'
+import { AutocompleteDropdown } from '../NavigationBar/AutocompleteDropdown'
+import { useUrlInput } from '../../hooks/useUrlInput'
+import '../NavigationBar/NavigationBar.css'
 
 interface NewTabPageProps {
   onNavigate: (url: string) => void
@@ -9,7 +12,25 @@ interface NewTabPageProps {
 
 export function NewTabPage({ onNavigate }: NewTabPageProps) {
   const [shortcuts, setShortcuts] = useState<BookmarkNode[]>([])
-  const [searchQuery, setSearchQuery] = useState('')
+
+  const {
+    inputValue,
+    suggestions,
+    isFocused,
+    showDropdown,
+    selectedIndex,
+    anchorRect,
+    inputRef,
+    dropdownRef,
+    anchorRef: urlBarRef,
+    handleInputChange,
+    handleKeyDown,
+    handleFocus,
+    handleBlur,
+    handleSelectSuggestion,
+    handleDeleteSuggestion,
+    performNavigation
+  } = useUrlInput({ onNavigate })
 
   useEffect(() => {
     loadShortcuts()
@@ -39,16 +60,9 @@ export function NewTabPage({ onNavigate }: NewTabPageProps) {
     }
   }
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (searchQuery.trim()) {
-      // Determine if it's a URL or search query
-      const isUrl = searchQuery.includes('.') || searchQuery.startsWith('http')
-      const url = isUrl 
-        ? (searchQuery.startsWith('http') ? searchQuery : `https://${searchQuery}`)
-        : `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`
-      onNavigate(url)
-    }
+    performNavigation(inputValue)
   }
 
   const handleShortcutClick = (url: string) => {
@@ -73,16 +87,40 @@ export function NewTabPage({ onNavigate }: NewTabPageProps) {
     <div className="flex flex-col items-center justify-center h-full w-full bg-gradient-to-br from-[#0a0a0b] via-[#0f0a14] to-[#0a0a0b]">
       {/* Search Bar */}
       <div className="w-full max-w-2xl px-8 mb-12">
-        <form onSubmit={handleSearch}>
-          <div className="relative">
+        <form onSubmit={handleSubmit}>
+          <div
+            ref={urlBarRef}
+            className={`url-bar ${isFocused ? 'focused' : ''}`}
+          >
+            <img src={orbitLogo} alt="Orbit" className="url-favicon" />
             <input
+              ref={inputRef}
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
               placeholder="Search or enter URL"
-              className="w-full px-6 py-4 text-lg rounded-full border border-white/20 bg-white/5 backdrop-blur-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent"
+              spellCheck={false}
+              className="url-input !outline-none !ring-0 !border-0 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
               autoFocus
+              role="combobox"
+              aria-expanded={showDropdown}
+              aria-autocomplete="both"
+              aria-controls="autocomplete-dropdown"
             />
+            {showDropdown && (
+              <AutocompleteDropdown
+                ref={dropdownRef}
+                suggestions={suggestions}
+                selectedIndex={selectedIndex}
+                onSelect={handleSelectSuggestion}
+                onDelete={handleDeleteSuggestion}
+                inputValue={inputValue}
+                anchorRect={anchorRect}
+              />
+            )}
           </div>
         </form>
       </div>
