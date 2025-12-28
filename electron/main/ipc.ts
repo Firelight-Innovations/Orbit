@@ -495,24 +495,69 @@ export function setupIpcHandlers(
     return profileService.getActiveProfileId()
   })
 
-  ipcMain.handle('profile:createProfile', (_event, name: string, color?: string, avatar?: string) => {
-    return profileService.createProfile(
+  ipcMain.handle('profile:createProfile', (event, name: string, color?: string, avatar?: string) => {
+    const profile = profileService.createProfile(
       name,
       (color as profileService.ProfileColor) || profileService.PROFILE_COLORS[0],
       avatar
     )
+    
+    // Broadcast profile list update to all windows
+    const allProfiles = profileService.getProfiles()
+    BrowserWindow.getAllWindows().forEach(window => {
+      window.webContents.send('profiles:updated', allProfiles)
+    })
+    
+    return profile
   })
 
-  ipcMain.handle('profile:updateProfile', (_event, profileId: string, updates: Partial<profileService.OrbitProfile>) => {
-    return profileService.updateProfile(profileId, updates)
+  ipcMain.handle('profile:updateProfile', (event, profileId: string, updates: Partial<profileService.OrbitProfile>) => {
+    const result = profileService.updateProfile(profileId, updates)
+    
+    // Broadcast profile list update to all windows
+    const allProfiles = profileService.getProfiles()
+    BrowserWindow.getAllWindows().forEach(window => {
+      window.webContents.send('profiles:updated', allProfiles)
+    })
+    
+    // If this is the active profile, also broadcast active profile change
+    const activeProfileId = profileService.getActiveProfileId()
+    if (activeProfileId === profileId) {
+      const activeProfile = profileService.getActiveProfile()
+      BrowserWindow.getAllWindows().forEach(window => {
+        window.webContents.send('profile:changed', activeProfile)
+      })
+    }
+    
+    return result
   })
 
-  ipcMain.handle('profile:deleteProfile', (_event, profileId: string) => {
-    return profileService.deleteProfile(profileId)
+  ipcMain.handle('profile:deleteProfile', (event, profileId: string) => {
+    const result = profileService.deleteProfile(profileId)
+    
+    // Broadcast profile list update to all windows
+    if (result) {
+      const allProfiles = profileService.getProfiles()
+      BrowserWindow.getAllWindows().forEach(window => {
+        window.webContents.send('profiles:updated', allProfiles)
+      })
+    }
+    
+    return result
   })
 
-  ipcMain.handle('profile:setActiveProfile', (_event, profileId: string) => {
-    return profileService.setActiveProfile(profileId)
+  ipcMain.handle('profile:setActiveProfile', (event, profileId: string) => {
+    const result = profileService.setActiveProfile(profileId)
+    
+    // Broadcast profile change to all windows
+    if (result) {
+      const activeProfile = profileService.getActiveProfile()
+      BrowserWindow.getAllWindows().forEach(window => {
+        window.webContents.send('profile:changed', activeProfile)
+      })
+    }
+    
+    return result
   })
 
   ipcMain.handle('profile:getProfileColors', () => {
@@ -535,7 +580,7 @@ export function setupIpcHandlers(
     return chromeImporter.getProfileDataSummary(profile)
   })
 
-  ipcMain.handle('chrome:importProfile', async (_event, chromeProfilePath: string, newProfileName: string, categories?: string[]) => {
+  ipcMain.handle('chrome:importProfile', async (event, chromeProfilePath: string, newProfileName: string, categories?: string[]) => {
     const profiles = chromeImporter.detectChromeProfiles()
     const chromeProfile = profiles.find(p => p.path === chromeProfilePath)
     
@@ -547,11 +592,21 @@ export function setupIpcHandlers(
 
     // Note: Progress callback would need WebSocket or similar for real-time updates
     // For now, we'll do the import synchronously
-    return await chromeImporter.importChromeProfile(
+    const result = await chromeImporter.importChromeProfile(
       chromeProfile,
       newProfileName,
       importCategories
     )
+    
+    // Broadcast profile list update to all windows after successful import
+    if (result.success) {
+      const allProfiles = profileService.getProfiles()
+      BrowserWindow.getAllWindows().forEach(window => {
+        window.webContents.send('profiles:updated', allProfiles)
+      })
+    }
+    
+    return result
   })
 
   ipcMain.handle('chrome:isRunning', () => {

@@ -44,6 +44,23 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
 
   useEffect(() => {
     loadData()
+    
+    // Listen for profile changes
+    const unsubscribeProfileChange = window.electronAPI.profile.onProfileChanged((profile) => {
+      if (profile) {
+        setActiveProfileId(profile.id)
+      }
+    })
+    
+    const unsubscribeProfilesUpdate = window.electronAPI.profile.onProfilesUpdated((updatedProfiles) => {
+      setProfiles(updatedProfiles)
+    })
+    
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeProfileChange()
+      unsubscribeProfilesUpdate()
+    }
   }, [])
 
   const loadData = async () => {
@@ -75,7 +92,6 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
     setIsCreating(true)
     try {
       await window.electronAPI.profile.createProfile(newProfileName.trim(), selectedColor)
-      await loadData()
       setShowCreateDialog(false)
       setNewProfileName('')
     } catch (error) {
@@ -94,7 +110,6 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
         selectedChromeProfile.path,
         selectedChromeProfile.name
       )
-      await loadData()
       setShowImportDialog(false)
       setSelectedChromeProfile(null)
     } catch (error) {
@@ -109,7 +124,6 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
     
     try {
       await window.electronAPI.profile.deleteProfile(showDeleteDialog.id)
-      await loadData()
       setShowDeleteDialog(null)
     } catch (error) {
       console.error('Failed to delete profile:', error)
@@ -119,7 +133,7 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
   const handleSwitchProfile = async (profileId: string) => {
     try {
       await window.electronAPI.profile.setActiveProfile(profileId)
-      setActiveProfileId(profileId)
+      // Event listeners will update the state automatically
     } catch (error) {
       console.error('Failed to switch profile:', error)
     }

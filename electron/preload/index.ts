@@ -171,7 +171,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setActiveProfile: (profileId: string) =>
       ipcRenderer.invoke('profile:setActiveProfile', profileId),
     getProfileColors: () => ipcRenderer.invoke('profile:getProfileColors'),
-    resetFirstLaunch: () => ipcRenderer.invoke('profile:resetFirstLaunch')
+    resetFirstLaunch: () => ipcRenderer.invoke('profile:resetFirstLaunch'),
+    
+    // Profile change events
+    onProfileChanged: (callback: (profile: OrbitProfile | null) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, profile: OrbitProfile | null) => callback(profile)
+      ipcRenderer.on('profile:changed', handler)
+      return () => ipcRenderer.removeListener('profile:changed', handler)
+    },
+    onProfilesUpdated: (callback: (profiles: OrbitProfile[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, profiles: OrbitProfile[]) => callback(profiles)
+      ipcRenderer.on('profiles:updated', handler)
+      return () => ipcRenderer.removeListener('profiles:updated', handler)
+    }
   },
 
   // Chrome Import

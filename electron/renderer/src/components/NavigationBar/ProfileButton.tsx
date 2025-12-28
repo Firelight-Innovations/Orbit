@@ -3,22 +3,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { 
   UserPlus, 
   Settings, 
-  Users, 
-  Check,
   ChevronDown,
   Import,
-  Sparkles
 } from 'lucide-react'
 import type { OrbitProfile } from '@/../../preload/index'
 
@@ -33,6 +26,21 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
 
   useEffect(() => {
     loadProfiles()
+    
+    // Listen for profile changes
+    const unsubscribeProfileChange = window.electronAPI.profile.onProfileChanged((profile) => {
+      setActiveProfile(profile)
+    })
+    
+    const unsubscribeProfilesUpdate = window.electronAPI.profile.onProfilesUpdated((profiles) => {
+      setProfiles(profiles)
+    })
+    
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeProfileChange()
+      unsubscribeProfilesUpdate()
+    }
   }, [])
 
   const loadProfiles = async () => {
@@ -51,9 +59,8 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
   const handleSwitchProfile = async (profileId: string) => {
     try {
       await window.electronAPI.profile.setActiveProfile(profileId)
-      await loadProfiles()
       setIsOpen(false)
-      // In a full implementation, this would trigger a browser restart/reload
+      // Event listeners will update the state automatically
     } catch (error) {
       console.error('Failed to switch profile:', error)
     }
@@ -110,105 +117,113 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
 
       <DropdownMenuContent 
         align="end" 
-        className="w-64 border-zinc-800 bg-zinc-900"
+        className="w-80 border-zinc-800 bg-zinc-900 p-0"
         sideOffset={8}
       >
-        {/* Current profile header */}
+        {/* Current profile header - Chrome style */}
         {activeProfile && (
           <>
-            <DropdownMenuLabel className="flex items-center gap-3 p-3">
+            <div className="flex flex-col items-center px-6 py-5 text-center">
               <Avatar 
-                className="h-10 w-10 ring-2"
+                className="mb-3 h-16 w-16 ring-[3px] ring-offset-2 ring-offset-zinc-900"
                 style={{ 
                   '--tw-ring-color': activeProfile.color 
                 } as React.CSSProperties}
               >
                 <AvatarImage src={activeProfile.avatar} alt={activeProfile.name} />
                 <AvatarFallback 
-                  className="text-sm font-medium text-white"
+                  className="text-xl font-semibold text-white"
                   style={{ backgroundColor: activeProfile.color }}
                 >
                   {getInitials(activeProfile.name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1 overflow-hidden">
-                <p className="truncate font-medium text-white">{activeProfile.name}</p>
-                {activeProfile.isImported && activeProfile.chromeProfileName && (
-                  <p className="truncate text-xs text-zinc-500">
-                    Imported from Chrome
+              <div className="w-full">
+                <p className="truncate text-base font-medium text-white">{activeProfile.name}</p>
+                {activeProfile.isImported && activeProfile.chromeProfileName ? (
+                  <p className="mt-0.5 truncate text-sm text-zinc-400">
+                    {activeProfile.chromeProfileName}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 truncate text-sm text-zinc-400">
+                    {activeProfile.name.toLowerCase().replace(/\s+/g, '.')}@orbit.local
                   </p>
                 )}
               </div>
-            </DropdownMenuLabel>
+            </div>
             <DropdownMenuSeparator className="bg-zinc-800" />
           </>
         )}
 
-        {/* Switch profile submenu (if multiple profiles) */}
+        {/* Other Orbit profiles - Chrome style */}
         {profiles.length > 1 && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="text-zinc-300 focus:bg-zinc-800 focus:text-white">
-              <Users className="mr-2 h-4 w-4" />
-              Switch Profile
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="border-zinc-800 bg-zinc-900">
-              {profiles.map((profile) => (
-                <DropdownMenuItem
-                  key={profile.id}
-                  onClick={() => handleSwitchProfile(profile.id)}
-                  className="flex items-center gap-3 text-zinc-300 focus:bg-zinc-800 focus:text-white"
-                >
-                  <Avatar 
-                    className="h-6 w-6 ring-1"
-                    style={{ 
-                      '--tw-ring-color': profile.color 
-                    } as React.CSSProperties}
-                  >
-                    <AvatarImage src={profile.avatar} alt={profile.name} />
-                    <AvatarFallback 
-                      className="text-[10px] font-medium text-white"
-                      style={{ backgroundColor: profile.color }}
+          <>
+            <div className="px-3 py-2">
+              <p className="px-3 py-1.5 text-xs font-medium text-zinc-500">
+                Other Orbit profiles
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {profiles
+                  .filter(profile => profile.id !== activeProfile?.id)
+                  .map((profile) => (
+                    <button
+                      key={profile.id}
+                      onClick={() => handleSwitchProfile(profile.id)}
+                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-zinc-800"
                     >
-                      {getInitials(profile.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="flex-1 truncate">{profile.name}</span>
-                  {profile.id === activeProfile?.id && (
-                    <Check className="h-4 w-4 text-purple-400" />
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+                      <Avatar 
+                        className="h-8 w-8 ring-2"
+                        style={{ 
+                          '--tw-ring-color': profile.color 
+                        } as React.CSSProperties}
+                      >
+                        <AvatarImage src={profile.avatar} alt={profile.name} />
+                        <AvatarFallback 
+                          className="text-xs font-medium text-white"
+                          style={{ backgroundColor: profile.color }}
+                        >
+                          {getInitials(profile.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 overflow-hidden">
+                        <p className="truncate text-sm font-medium text-zinc-200">
+                          {profile.name}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            </div>
+            <DropdownMenuSeparator className="bg-zinc-800" />
+          </>
         )}
 
-        {/* Add new profile options */}
-        <DropdownMenuItem 
-          onClick={handleAddProfile}
-          className="text-zinc-300 focus:bg-zinc-800 focus:text-white"
-        >
-          <Sparkles className="mr-2 h-4 w-4" />
-          Create New Profile
-        </DropdownMenuItem>
+        {/* Action buttons - Chrome style */}
+        <div className="flex flex-col gap-0.5 p-2">
+          <DropdownMenuItem 
+            onClick={handleAddProfile}
+            className="cursor-pointer rounded-md px-3 py-2.5 text-sm text-zinc-300 focus:bg-zinc-800 focus:text-white"
+          >
+            <UserPlus className="mr-3 h-4 w-4" />
+            Create New Profile
+          </DropdownMenuItem>
 
-        <DropdownMenuItem 
-          onClick={handleAddProfile}
-          className="text-zinc-300 focus:bg-zinc-800 focus:text-white"
-        >
-          <Import className="mr-2 h-4 w-4" />
-          Import from Chrome
-        </DropdownMenuItem>
+          <DropdownMenuItem 
+            onClick={handleAddProfile}
+            className="cursor-pointer rounded-md px-3 py-2.5 text-sm text-zinc-300 focus:bg-zinc-800 focus:text-white"
+          >
+            <Import className="mr-3 h-4 w-4" />
+            Import from Chrome
+          </DropdownMenuItem>
 
-        <DropdownMenuSeparator className="bg-zinc-800" />
-
-        {/* Manage profiles */}
-        <DropdownMenuItem 
-          onClick={handleManageProfiles}
-          className="text-zinc-300 focus:bg-zinc-800 focus:text-white"
-        >
-          <Settings className="mr-2 h-4 w-4" />
-          Manage Profiles
-        </DropdownMenuItem>
+          <DropdownMenuItem 
+            onClick={handleManageProfiles}
+            className="cursor-pointer rounded-md px-3 py-2.5 text-sm text-zinc-300 focus:bg-zinc-800 focus:text-white"
+          >
+            <Settings className="mr-3 h-4 w-4" />
+            Manage Profiles
+          </DropdownMenuItem>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   )
