@@ -367,10 +367,20 @@ class BrowserInstance:
     async def _inject_scripts_to_page(self, page: Page) -> None:
         """
         Inject required scripts into a specific page.
-        
+
         Used for CDP connections where we can't use context.add_init_script()
         for existing pages.
         """
+        # Never inject automation scripts into Orbit's own renderers (the UI
+        # view, the assistant sidebar, the blank window-root). botIndicators.js
+        # and botCursor.js paint position:fixed, full-window overlays -- on the
+        # UI view that covers the whole screen, and on the sidebar it hides the
+        # chat. The agent-active visuals belong only on the real web page it
+        # controls.
+        if self._is_internal_url(page.url):
+            logger.debug(f"Skipping script injection for internal page: {page.url}")
+            return
+
         static_dir = pathlib.Path(__file__).parent.parent.joinpath("static")
         
         # Inject DOM snapshot script (critical for element targeting)
