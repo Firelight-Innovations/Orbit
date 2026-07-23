@@ -5,11 +5,24 @@ FastAPI application providing the backend services for the Orbit electron app.
 Includes automatic OpenAPI documentation.
 """
 
+import logging
+from pathlib import Path
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
+
+# Configure logging to show INFO level messages
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import api, assistant
-from backend.ai import router as ai_router
 
 # Create FastAPI application with OpenAPI documentation
 app = FastAPI(
@@ -51,7 +64,6 @@ app.add_middleware(
 # Include API routers
 app.include_router(api.router, prefix="/api", tags=["API"])
 app.include_router(assistant.router, prefix="/api", tags=["Assistant"])
-app.include_router(ai_router.router, prefix="/api", tags=["AI"])
 
 
 @app.get("/", tags=["Root"])

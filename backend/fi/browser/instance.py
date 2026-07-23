@@ -4,13 +4,42 @@ import pathlib
 import platform
 import random
 import logging
-from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
-from src.visualization.cursor import PlaywrightBotCursor
-from src.browser.auto_scroll import AutoScrollManager
+from playwright.async_api import async_playwright, Page, Browser, BrowserContext
 from typing import List
 
 logger = logging.getLogger(__name__)
+
+# Optional imports - these may not be available in all environments
+try:
+    from playwright_stealth import stealth_async
+    HAS_STEALTH = True
+except ImportError:
+    # Try alternate import
+    try:
+        from playwright_stealth import Stealth
+        async def stealth_async(page):
+            stealth = Stealth()
+            await stealth.apply(page)
+        HAS_STEALTH = True
+    except ImportError:
+        HAS_STEALTH = False
+        stealth_async = None
+        logger.warning("playwright_stealth not available - stealth measures disabled")
+
+try:
+    from fi.visualization.cursor import PlaywrightBotCursor
+    HAS_CURSOR = True
+except ImportError:
+    HAS_CURSOR = False
+    PlaywrightBotCursor = None
+    logger.warning("PlaywrightBotCursor not available - cursor visualization disabled")
+
+# AutoScrollManager is not essential, make it optional
+HAS_AUTO_SCROLL = False
+AutoScrollManager = None
+
+# Default CDP port matching Electron's remote-debugging-port
+DEFAULT_CDP_PORT = 9222
 
 class BrowserInstance:
     def __init__(self):
@@ -33,16 +62,335 @@ class BrowserInstance:
         
         # The browser is connected via CDP, so we can try to get the version
         try:
-            version = await self.browser.version()
+            version = self.browser.version
             return version is not None
         except Exception:
             return False
+
+    async def connect_via_cdp(
+        self, 
+        cdp_url: str | None = None, 
+        port: int | None = None,
+        max_retries: int = 3,
+        retry_delay: float = 1.0
+    ) -> Page:
+        """
+        Connect to an existing browser (e.g., Electron) via Chrome DevTools Protocol.
+        
+        This allows the agent to control an already-running browser instead of
+        launching a new one.
+        
+        Args:
+            cdp_url: Full CDP endpoint URL (e.g., "http://localhost:9222")
+            port: CDP port number (used if cdp_url not provided)
+            max_retries: Maximum number of connection attempts
+            retry_delay: Delay between retries in seconds
+            
+        Returns:
+            The active Page object
+            
+        Raises:
+            ConnectionError: If unable to connect after all retries
+        """
+        if cdp_url is None:
+            target_port = port or DEFAULT_CDP_PORT
+            # Use 127.0.0.1 explicitly instead of localhost to avoid IPv6 resolution issues
+            cdp_url = f"http://127.0.0.1:{target_port}"
+        
+        last_error: Exception | None = None
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Connecting to browser via CDP at {cdp_url} (attempt {attempt + 1}/{max_retries})")
+                
+                # Start Playwright if not already started
+                if not self.playwright:
+                    self.playwright = await async_playwright().start()
+                
+                # Connect to existing browser via CDP (with 15 second timeout)
+                self.browser = await self.playwright.chromium.connect_over_cdp(cdp_url, timeout=15000)
+                
+                # Get existing context/page from the browser
+                contexts = self.browser.contexts
+                if contexts:
+                    self.context = contexts[0]
+                    pages = self.context.pages
+                    if pages:
+                        # Use the first available page (usually the active tab)
+                        self.page = pages[0]
+                        logger.info(f"Connected to existing page: {self.page.url}")
+                    else:
+                        # No pages exist, create one
+                        self.page = await self.context.new_page()
+                        logger.info("Created new page in existing context")
+                else:
+                    # No contexts exist, create one
+                    self.context = await self.browser.new_context()
+                    self.page = await self.context.new_page()
+                    logger.info("Created new context and page")
+                
+                # Inject scripts to the current page
+                await self._inject_scripts_to_page(self.page)
+
+                # Apply stealth measures
+                if HAS_STEALTH and stealth_async:
+                    try:
+                        await stealth_async(self.page)
+                    except Exception as e:
+                        logger.warning(f"Could not apply stealth measures: {e}")
+
+                # Initialize cursor controller
+                if HAS_CURSOR and PlaywrightBotCursor:
+                    self.cursor = PlaywrightBotCursor(self.page)
+
+                # Repoint self.page if this tab closes
+                self.page.on("close", self._on_page_close)
+
+                # Listen for new pages (tabs) in the context
+                self.context.on("page", self._on_new_page)
+                
+                logger.info(f"CDP connection established. Active page: {self.page.url}")
+                return self.page
+                
+            except Exception as e:
+                last_error = e
+                logger.warning(f"CDP connection attempt {attempt + 1} failed: {e}")
+                
+                # Clean up failed attempt
+                if self.playwright:
+                    try:
+                        await self.playwright.stop()
+                    except Exception:
+                        pass
+                    self.playwright = None
+                
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay * (attempt + 1))
+        
+        # All retries failed
+        error_msg = f"Failed to connect to browser via CDP after {max_retries} attempts"
+        if last_error:
+            error_msg += f": {last_error}"
+        raise ConnectionError(error_msg)
+
+    def _on_new_page(self, page: Page) -> None:
+        """Handle new pages (tabs) created in the browser context.
+
+        Follow the new tab (OAuth/login popups, redirect-to-new-tab mid-run).
+        resolve_active_page() re-corrects on the next turn if the foreground
+        tab is actually a different one.
+        """
+        async def setup_page():
+            try:
+                await self._inject_scripts_to_page(page)
+                self.page = page
+                if HAS_CURSOR and PlaywrightBotCursor:
+                    self.cursor = PlaywrightBotCursor(page)
+                logger.info(f"Followed new page: {page.url}")
+            except Exception as e:
+                logger.warning(f"Failed to set up new page: {e}")
+
+        # Repoint self.page if this tab closes
+        page.on("close", self._on_page_close)
+
+        # Schedule the async setup
+        asyncio.create_task(setup_page())
+
+    def _on_page_close(self, page: Page) -> None:
+        """Handle a page (tab) closing; repoint self.page to a surviving tab."""
+        if page is not self.page:
+            return
+        surviving = None
+        if self.context:
+            surviving = [p for p in self.context.pages if p is not page and not p.is_closed()]
+        if surviving:
+            self.page = surviving[-1]
+            if HAS_CURSOR and PlaywrightBotCursor:
+                self.cursor = PlaywrightBotCursor(self.page)
+            logger.info(f"Active tab closed; repointed to: {self.page.url}")
+        else:
+            self.page = None
+            self.cursor = None
+            logger.info("Active tab closed; no surviving pages")
+
+    @staticmethod
+    def _normalize_url(url: str | None) -> str:
+        """Normalize a URL for comparison: strip fragment and trailing slash."""
+        if not url:
+            return ""
+        normalized = url.split("#", 1)[0]
+        if normalized.endswith("/"):
+            normalized = normalized[:-1]
+        return normalized
+
+    async def resolve_active_page(self, url: str | None) -> Page | None:
+        """Point self.page at the foreground tab matching the given URL.
+
+        Matches page_context.url (the Electron active tab) against the pages in
+        the CDP context. Exact match first, then host+path prefix. No match
+        leaves the current page untouched (self-heals next turn).
+        """
+        if not url or not self.context:
+            return self.page
+
+        target = self._normalize_url(url)
+        if not target:
+            return self.page
+
+        candidates = [
+            p for p in self.context.pages
+            if not p.is_closed() and p.url and not p.url.startswith("about:blank")
+        ]
+
+        match = None
+        # Exact normalized match
+        for p in candidates:
+            if self._normalize_url(p.url) == target:
+                match = p
+                break
+        # Prefix match (handles post-load redirects / query differences)
+        if match is None:
+            for p in candidates:
+                pu = self._normalize_url(p.url)
+                if pu.startswith(target) or target.startswith(pu):
+                    match = p
+                    break
+
+        if match is not None and match is not self.page:
+            await self.switch_to_page(match)
+        return self.page
+
+    async def _inject_scripts_to_page(self, page: Page) -> None:
+        """
+        Inject required scripts into a specific page.
+        
+        Used for CDP connections where we can't use context.add_init_script()
+        for existing pages.
+        """
+        static_dir = pathlib.Path(__file__).parent.parent.joinpath("static")
+        
+        # Inject DOM snapshot script (critical for element targeting)
+        try:
+            dom_snapshot_path = static_dir.joinpath("dom_snapshot.js")
+            if dom_snapshot_path.exists():
+                dom_snapshot_script = dom_snapshot_path.read_text()
+                await page.evaluate(dom_snapshot_script)
+                # Also add as init script for future navigations
+                await page.add_init_script(dom_snapshot_script)
+                logger.debug("DOM snapshot script injected")
+        except Exception as e:
+            logger.warning(f"Failed to inject DOM snapshot script: {e}")
+        
+        # Inject bot cursor script
+        try:
+            cursor_script_path = static_dir.joinpath("botCursor.js")
+            if cursor_script_path.exists():
+                cursor_script = cursor_script_path.read_text()
+                await page.evaluate(cursor_script)
+                await page.add_init_script(cursor_script)
+                logger.debug("Bot cursor script injected")
+        except Exception as e:
+            logger.warning(f"Failed to inject bot cursor script: {e}")
+        
+        # Inject bot indicators script
+        try:
+            indicator_script_path = static_dir.joinpath("botIndicators.js")
+            if indicator_script_path.exists():
+                indicator_script = indicator_script_path.read_text()
+                await page.evaluate(indicator_script)
+                await page.add_init_script(indicator_script)
+                logger.debug("Bot indicators script injected")
+        except Exception as e:
+            logger.warning(f"Failed to inject bot indicators script: {e}")
+        
+        # Add stealth measures
+        stealth_script = """
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """
+        try:
+            await page.evaluate(stealth_script)
+            await page.add_init_script(stealth_script)
+        except Exception as e:
+            logger.warning(f"Failed to inject stealth script: {e}")
+
+    async def switch_to_page(self, page: Page) -> None:
+        """
+        Switch agent focus to a different page (tab).
+        
+        Args:
+            page: The Page object to switch to
+        """
+        self.page = page
+        await self._inject_scripts_to_page(page)
+        if HAS_CURSOR and PlaywrightBotCursor:
+            self.cursor = PlaywrightBotCursor(page)
+        logger.info(f"Switched to page: {page.url}")
+
+    async def switch_to_page_by_index(self, index: int) -> Page | None:
+        """
+        Switch to a page by its index in the context.
+        
+        Args:
+            index: Zero-based index of the page
+            
+        Returns:
+            The Page object if found, None otherwise
+        """
+        if not self.context:
+            logger.error("No browser context available")
+            return None
+        
+        pages = self.context.pages
+        if 0 <= index < len(pages):
+            await self.switch_to_page(pages[index])
+            return self.page
+        else:
+            logger.error(f"Page index {index} out of range (0-{len(pages)-1})")
+            return None
+
+    async def get_all_pages(self) -> list[Page]:
+        """Get all pages (tabs) in the current context."""
+        if not self.context:
+            return []
+        return self.context.pages
+
+    async def disconnect(self) -> None:
+        """
+        Disconnect from the CDP browser without closing it.
+        
+        Unlike close(), this leaves the browser running.
+        """
+        if self.cursor:
+            try:
+                await self.cursor.set_visibility(False)
+            except Exception:
+                pass
+        
+        if self.browser:
+            try:
+                # Disconnect without closing the browser
+                await self.browser.close()
+            except Exception as e:
+                logger.warning(f"Error during disconnect: {e}")
+        
+        if self.playwright:
+            await self.playwright.stop()
+        
+        self.browser = None
+        self.context = None
+        self.page = None
+        self.playwright = None
+        self.cursor = None
+        
+        logger.info("Disconnected from CDP browser")
 
     def _get_user_data_dir(self):
         """Get realistic user data directory based on OS"""
         system = platform.system()
         if system == "Windows":
-            base_dir = os.environ.get('LOCALAPPDATA', os.path.expanduser('~\AppData\Local'))
+            base_dir = os.environ.get('LOCALAPPDATA', os.path.expanduser(r'~\AppData\Local'))
             return os.path.join(base_dir, 'ms-playwright', 'mcp-chromium-profile')
         elif system == "Darwin":
             return os.path.expanduser('~/Library/Caches/ms-playwright/mcp-chromium-profile')
@@ -143,7 +491,13 @@ class BrowserInstance:
             pass
 
         self.page = await self.context.new_page()
-        await stealth_async(self.page)
+        
+        # Apply stealth if available
+        if HAS_STEALTH and stealth_async:
+            try:
+                await stealth_async(self.page)
+            except Exception as e:
+                logger.warning(f"Could not apply stealth measures: {e}")
         
         # Add additional stealth measures at page level
         await self.page.add_init_script("""
@@ -168,7 +522,8 @@ class BrowserInstance:
         self.browser = self.context.browser
         
         # Initialize cursor controller
-        self.cursor = PlaywrightBotCursor(self.page)
+        if HAS_CURSOR and PlaywrightBotCursor:
+            self.cursor = PlaywrightBotCursor(self.page)
         #self.auto_scroll_manager = AutoScrollManager(self.page)
         
         return self.page

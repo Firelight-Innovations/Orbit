@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from 'child_process'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import { is } from '@electron-toolkit/utils'
@@ -28,11 +29,18 @@ export class PythonBackend {
         ? join(process.cwd(), 'backend')
         : join(process.resourcesPath, 'backend')
 
-      // Determine python executable
-      const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
+      // Prefer the backend's own venv interpreter so boot doesn't depend on
+      // whether the launching shell activated it. Fall back to PATH python.
+      const venvPython =
+        process.platform === 'win32'
+          ? join(backendPath, '.venv', 'Scripts', 'python.exe')
+          : join(backendPath, '.venv', 'bin', 'python3')
+      const fallbackPython = process.platform === 'win32' ? 'python' : 'python3'
+      const pythonCmd = existsSync(venvPython) ? venvPython : fallbackPython
 
       console.log(`Starting Python backend on port ${this.port}...`)
       console.log(`Backend path: ${backendPath}`)
+      console.log(`Python executable: ${pythonCmd}`)
 
       this.process = spawn(
         pythonCmd,
@@ -79,13 +87,13 @@ export class PythonBackend {
         this.process = null
       })
 
-      // Timeout after 30 seconds
+      // Timeout after 90 seconds
       setTimeout(() => {
         if (!this.ready) {
           console.warn('Python backend startup timed out, continuing anyway...')
           resolve()
         }
-      }, 30000)
+      }, 90000)
     })
   }
 

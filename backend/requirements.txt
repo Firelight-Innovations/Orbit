@@ -1,10 +1,12 @@
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-pydantic>=2.5.0
-langchain>=0.3.0
-langchain-openai>=0.2.0
-playwright>=1.40.0
+fastapi==0.116.2
+starlette==0.47.2
+uvicorn[standard]==0.34.0
+pydantic==2.11.7
+httpx==0.28.1
+playwright==1.57.0
 playwright-stealth>=1.0.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
-
+# langchain / langchain-openai: kept only until backend/ai is removed (Phase C)
+langchain>=0.3.0
+langchain-openai>=0.2.0
