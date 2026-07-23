@@ -50,3 +50,6 @@ htmlcov/
 *.bak
 *.tmp
 
+
+# TypeScript incremental build cache
+*.tsbuildinfo
