@@ -1,10 +1,16 @@
+/*
+ * Toolbar. The bar itself is the raised tone (#161b22) — Simplicity's surface —
+ * and the URL field is inset one step darker with the dark-200 hairline that
+ * brightens on hover and takes the accent on focus, mirroring the composer's
+ * focus-within treatment.
+ */
 .navigation-bar {
   display: flex;
   align-items: center;
   height: 40px;
   padding: 0 12px;
   gap: 8px;
-  background: var(--bg-secondary);
+  background: var(--surface-raised);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   position: relative;
@@ -33,7 +39,7 @@
   background: transparent;
   padding: 0;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   transition: background var(--transition-fast);
 }
 
@@ -62,7 +68,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: var(--text-secondary);
   transition: background var(--transition-fast), color var(--transition-fast);
 }
@@ -78,7 +84,12 @@
 }
 
 .nav-btn:active:not(:disabled) {
-  background: var(--bg-tertiary);
+  background: var(--bg-active);
+}
+
+.nav-btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 
 .nav-btn:disabled {
@@ -94,19 +105,20 @@
   height: 30px;
   padding: 0 10px;
   gap: 8px;
-  background: var(--bg-tertiary);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
   position: relative; /* For dropdown positioning */
 }
 
 .url-bar:hover {
-  background: var(--bg-elevated);
+  border-color: var(--border-default);
 }
 
 .url-bar.focused {
-  background: var(--bg-elevated);
+  background: var(--surface-base);
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px var(--accent-glow);
   z-index: 101; /* Ensure focused url-bar and dropdown appear on top */
@@ -199,7 +211,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   transition: background var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
 }
@@ -210,11 +222,16 @@
 }
 
 .star-button:active {
-  background: var(--bg-tertiary);
+  background: var(--bg-active);
+}
+
+.star-button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 
 .star-button svg[fill="currentColor"] {
-  color: #f59e0b; /* Amber color for bookmarked state */
+  color: var(--warning); /* Bookmarked state */
 }
 
 /* Loading Indicator */
@@ -250,4 +267,3 @@
   padding-left: 8px;
   flex-shrink: 0;
 }
-

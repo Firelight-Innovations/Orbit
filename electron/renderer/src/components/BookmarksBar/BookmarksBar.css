@@ -1,9 +1,14 @@
+/*
+ * Bookmarks strip and its menus. Same raised tone as the toolbar it hangs off,
+ * with pill-shaped hover fills and Simplicity's card recipe (raised surface +
+ * dark-200 hairline + soft black shadow) for the dropdowns.
+ */
 .bookmarks-bar {
   display: flex;
   align-items: center;
   height: 32px;
   padding: 0 8px;
-  background: var(--bg-secondary);
+  background: var(--surface-raised);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   overflow: hidden;
@@ -40,12 +45,12 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 13px;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
   user-select: none;
   position: relative;
   flex-shrink: 0;
@@ -53,6 +58,12 @@
 
 .bookmark-item:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.bookmark-item:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 
 .bookmark-item.dragging {
@@ -97,12 +108,12 @@
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 13px;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
   user-select: none;
   position: relative;
   flex-shrink: 0;
@@ -110,10 +121,17 @@
 
 .bookmark-folder:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .bookmark-folder.open {
   background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.bookmark-folder:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 
 .bookmark-folder.drag-over {
@@ -146,7 +164,7 @@
   align-items: center;
   justify-content: center;
   padding: 4px 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: var(--text-secondary);
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
@@ -157,6 +175,11 @@
 .overflow-menu-button:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.overflow-menu-button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 
 .overflow-menu-button svg {
@@ -171,10 +194,10 @@
   max-width: 300px;
   max-height: 400px;
   overflow-y: auto;
-  background: var(--bg-primary);
+  background: var(--surface-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   z-index: 1000;
   padding: 4px;
 }
@@ -184,15 +207,21 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background var(--transition-fast);
-  color: var(--text-primary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
 .folder-dropdown-item:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.folder-dropdown-item:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
 }
 
 .folder-dropdown-item .bookmark-favicon,
@@ -228,10 +257,10 @@
 /* Bookmark Menu */
 .bookmark-menu {
   min-width: 240px;
-  background: var(--bg-primary);
+  background: var(--surface-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   padding: 4px;
   z-index: 10000;
 }
@@ -241,20 +270,26 @@
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background var(--transition-fast);
-  color: var(--text-primary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  color: var(--text-secondary);
   font-size: 13px;
   user-select: none;
 }
 
 .bookmark-menu-item:hover:not(.disabled) {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .bookmark-menu-item:active:not(.disabled) {
-  background: var(--bg-tertiary);
+  background: var(--bg-active);
+}
+
+.bookmark-menu-item:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
 }
 
 .bookmark-menu-item.disabled {
@@ -264,11 +299,12 @@
 }
 
 .bookmark-menu-item.danger {
-  color: #ef4444;
+  color: var(--error);
 }
 
 .bookmark-menu-item.danger:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--error-soft);
+  color: var(--error);
 }
 
 .bookmark-menu-item svg {
