@@ -667,7 +667,7 @@ class BrowserInstance:
             return False
         
         if animate:
-            return await self.cursor.animate_to_position(x, y, duration=300, showTrail=True)
+            return await self.cursor.animate_to_position(x, y)
         else:
             return await self.cursor.set_cursor_position(x, y, createTrail=True)
 

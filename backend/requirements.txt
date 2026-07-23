@@ -14,5 +14,8 @@ httpx==0.28.1
 greenlet>=3.1.1
 pyee>=11.0.0
 playwright-stealth>=1.0.0
+# Letterboxes page screenshots to 1024x1024 for the agent's per-turn vision
+# input. Without it the agent falls back to sending native-size screenshots.
+pillow>=10.0.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
