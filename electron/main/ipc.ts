@@ -11,7 +11,13 @@ import {
   normalizeUrl,
   broadcastTabUpdate,
   setUIViewFullscreen,
-  updateAllTabViewBounds
+  updateAllTabViewBounds,
+  updateSidebarViewBounds,
+  focusActiveTab,
+  focusSidebar,
+  sendAssistantContext,
+  broadcastAssistantOpen,
+  sidebarViews
 } from './index'
 import { getSearchHistoryService } from './services/searchHistory'
 import { getSearchSuggestionsService } from './services/searchSuggestions'
@@ -20,6 +26,41 @@ import * as profileService from './services/profileService'
 import * as chromeImporter from './services/chromeImporter'
 import { getBookmarksService } from './services/bookmarksService'
 import type { BookmarkCreateData, BookmarkUpdateData } from './services/bookmarksService'
+
+// Helper to wait for backend with retries
+async function waitForBackend(
+  pythonBackend: PythonBackend | null,
+  maxRetries = 10,
+  delayMs = 2000
+): Promise<string | null> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const baseUrl = pythonBackend?.getBaseUrl()
+    if (!baseUrl) {
+      console.log(`[waitForBackend] Attempt ${attempt + 1}/${maxRetries}: No base URL yet`)
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      continue
+    }
+
+    try {
+      // Try a simple health check
+      const response = await fetch(`${baseUrl}/api/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(3000)
+      })
+      if (response.ok) {
+        console.log(`[waitForBackend] Backend ready after ${attempt + 1} attempts`)
+        return baseUrl
+      }
+    } catch {
+      console.log(`[waitForBackend] Attempt ${attempt + 1}/${maxRetries}: Health check failed, retrying...`)
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+  
+  // Return null if we couldn't confirm backend is ready
+  console.log('[waitForBackend] Backend not ready after all retries')
+  return null
+}
 
 export function setupIpcHandlers(
   windowStates: Map<number, WindowState>,
@@ -60,6 +101,15 @@ export function setupIpcHandlers(
     // When ignore=true, shrink UI to header only (web content gets clicks)
     // When ignore=false, expand UI to full window (UI captures all clicks)
     setUIViewFullscreen(window, !ignore)
+
+    // Route keyboard focus with the mouse-attention change. The sidebar view
+    // is separate and never participates in this click-through trick.
+    if (ignore) {
+      focusActiveTab(window)
+    } else {
+      const uiView = event.sender
+      uiView.focus()
+    }
   })
 
   // Tab management handlers
@@ -742,13 +792,18 @@ export function setupIpcHandlers(
     'assistant:sendMessage',
     async (
       event,
-      payload: { message: string; pageContext?: { url?: string | null; selectedText?: string | null } }
+      payload: {
+        message: string
+        pageContext?: { url?: string | null; selectedText?: string | null }
+        mode?: 'ask' | 'agent' | 'plan'
+        conversationId?: string
+      }
     ) => {
       const window = BrowserWindow.fromWebContents(event.sender)
-      const baseUrl = pythonBackend?.getBaseUrl()
+      const baseUrl = await waitForBackend(pythonBackend, 5, 1000)
 
       if (!baseUrl) {
-        return { error: 'Backend not available' }
+        return { error: 'Backend not available. Please wait a moment and try again.' }
       }
 
       const state = window ? windowStates.get(window.id) : null
@@ -766,7 +821,9 @@ export function setupIpcHandlers(
           },
           body: JSON.stringify({
             message: payload.message,
-            page_context: pageContext
+            page_context: pageContext,
+            mode: payload.mode ?? 'ask',
+            conversation_id: payload.conversationId ?? null
           })
         })
 
@@ -793,6 +850,191 @@ export function setupIpcHandlers(
       state.isAssistantOpen = isOpen
       // Update all tab view bounds to account for assistant width
       updateAllTabViewBounds(window.id)
+    }
+
+    // Show/hide the dedicated sidebar view and route focus accordingly
+    const sidebarView = sidebarViews.get(window.id)
+    if (sidebarView) {
+      sidebarView.setVisible(isOpen)
+      if (isOpen) {
+        updateSidebarViewBounds(window)
+        // Seed the sidebar with the current active tab URL, then focus it so
+        // the input is immediately typable.
+        const activeTab = state?.tabs.find((t) => t.id === state.activeTabId)
+        sendAssistantContext(window.id, { url: activeTab?.url ?? null })
+        focusSidebar(window)
+      } else {
+        // Returning focus to the page is the third fix.
+        focusActiveTab(window)
+      }
+    }
+
+    // Keep both renderers' stores in sync regardless of which view toggled.
+    broadcastAssistantOpen(window.id, isOpen)
+  })
+
+  // Relay page context (e.g. a text selection) from the main UI view to the
+  // sidebar view, which is a separate renderer.
+  ipcMain.on(
+    'assistant:updateContext',
+    (event, context: { url?: string | null; selectedText?: string | null }) => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      if (!window) return
+      sendAssistantContext(window.id, context)
+    }
+  )
+
+  // Assistant streaming chat handler
+  ipcMain.on(
+    'assistant:sendMessageStream',
+    async (
+      event,
+      payload: {
+        message: string
+        pageContext?: { url?: string | null; selectedText?: string | null }
+        mode?: 'ask' | 'agent' | 'plan'
+        conversationId?: string
+      }
+    ) => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const baseUrl = await waitForBackend(pythonBackend, 5, 1000)
+
+      if (!baseUrl) {
+        event.sender.send('assistant:streamEvent', {
+          type: 'error',
+          content: 'Backend is still starting up. Please wait a moment and try again.'
+        })
+        return
+      }
+
+      const state = window ? windowStates.get(window.id) : null
+      const activeTab = state?.tabs.find((t) => t.id === state.activeTabId)
+      const pageContext = {
+        url: payload.pageContext?.url ?? activeTab?.url ?? null,
+        selected_text: payload.pageContext?.selectedText ?? null
+      }
+
+      try {
+        const response = await fetch(`${baseUrl}/api/assistant/chat/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: payload.message,
+            page_context: pageContext,
+            mode: payload.mode ?? 'ask',
+            conversation_id: payload.conversationId ?? null
+          })
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          event.sender.send('assistant:streamEvent', {
+            type: 'error',
+            content: errorText || 'Assistant request failed'
+          })
+          return
+        }
+
+        // Read the SSE stream
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+
+        if (!reader) {
+          event.sender.send('assistant:streamEvent', {
+            type: 'error',
+            content: 'No response body'
+          })
+          return
+        }
+
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+
+          if (done) {
+            break
+          }
+
+          buffer += decoder.decode(value, { stream: true })
+
+          // Process complete SSE messages
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6))
+                event.sender.send('assistant:streamEvent', data)
+              } catch (parseError) {
+                console.error('Failed to parse SSE data:', parseError)
+              }
+            }
+          }
+        }
+
+        // Process any remaining data in buffer
+        if (buffer.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(buffer.slice(6))
+            event.sender.send('assistant:streamEvent', data)
+          } catch (parseError) {
+            console.error('Failed to parse final SSE data:', parseError)
+          }
+        }
+      } catch (error) {
+        console.error('Streaming request failed:', error)
+        event.sender.send('assistant:streamEvent', {
+          type: 'error',
+          content: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
+    }
+  )
+
+  // Assistant connection status
+  ipcMain.handle('assistant:connect', async () => {
+    const baseUrl = await waitForBackend(pythonBackend, 5, 1000)
+
+    if (!baseUrl) {
+      return { connected: false, error: 'Backend is still starting up. Please wait a moment.' }
+    }
+
+    try {
+      const response = await fetch(`${baseUrl}/api/assistant/connect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ port: 9222 })
+      })
+
+      return await response.json()
+    } catch (error) {
+      console.error('Connection failed:', error)
+      return {
+        connected: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  // Get assistant connection status
+  ipcMain.handle('assistant:getStatus', async () => {
+    const baseUrl = await waitForBackend(pythonBackend, 3, 500)
+
+    if (!baseUrl) {
+      return { connected: false }
+    }
+
+    try {
+      const response = await fetch(`${baseUrl}/api/assistant/status`)
+      return await response.json()
+    } catch (error) {
+      return { connected: false }
     }
   })
 }

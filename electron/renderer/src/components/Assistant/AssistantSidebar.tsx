@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
   Bot,
   User,
@@ -8,9 +8,15 @@ import {
   Hammer,
   FileText,
   HelpCircle,
-  X
+  X,
+  Wifi,
+  WifiOff,
+  ChevronRight,
+  Check,
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
-import { assistantStore, useAssistantStore, AssistantMode, AssistantTab } from '@/stores/assistantStore';
+import { assistantStore, useAssistantStore, AssistantMode, AssistantTab, ToolCall } from '@/stores/assistantStore';
 import { cn } from '@/lib/utils';
 
 interface AssistantSidebarProps {
@@ -50,9 +56,11 @@ const MODE_CONFIG: Record<AssistantMode, {
 };
 
 export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: AssistantSidebarProps) {
-  const { isSending, messages, pageContext, mode, activeTab } = useAssistantStore((s) => s);
+  const { isSending, messages, pageContext, mode, activeTab, connectionStatus, conversationId } = useAssistantStore((s) => s);
   const [input, setInput] = useState('');
   const [showModePicker, setShowModePicker] = useState(false);
+  const [useStreaming, setUseStreaming] = useState(true);
+  const cleanupRef = useRef<(() => void) | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -63,6 +71,13 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
     assistantStore.setPageContext({ url: activeUrl ?? null, selectedText: selectedText ?? null });
   }, [activeUrl, selectedText]);
 
+  // Check connection status on mount and when mode changes to agent
+  useEffect(() => {
+    if (mode === 'agent') {
+      assistantStore.refreshStatus();
+    }
+  }, [mode]);
+
   // Handle Escape
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -72,6 +87,15 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Cleanup streaming on unmount
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+    };
   }, []);
 
   // Scroll to bottom
@@ -93,6 +117,116 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
     adjustTextareaHeight();
   }, [input]);
 
+  const handleSendStreaming = useCallback(async (message: string, assistantMessageId: string) => {
+    const contextToSend = {
+      url: pageContext?.url ?? activeUrl ?? null,
+      selectedText: pageContext?.selectedText ?? selectedText ?? null
+    };
+
+    // Use streaming API
+    const cleanup = window.electronAPI.assistant.sendMessageStream(
+      message,
+      contextToSend,
+      mode,
+      conversationId,
+      {
+        onEvent: (event) => {
+          switch (event.type) {
+            case 'thinking':
+              assistantStore.updateMessage(assistantMessageId, {
+                content: event.content || 'Thinking...',
+                streaming: true
+              });
+              break;
+            case 'chunk':
+              assistantStore.appendChunk(assistantMessageId, event.content || '');
+              break;
+            case 'tool_start':
+              if (event.tool_name) {
+                assistantStore.addToolCall(assistantMessageId, {
+                  id: `tool-${Date.now()}`,
+                  name: event.tool_name,
+                  args: event.tool_args || {},
+                  status: 'running'
+                });
+              }
+              break;
+            case 'tool_end':
+              // Find the last tool call with this name and update it
+              const state = assistantStore.getState();
+              const msg = state.messages.find(m => m.id === assistantMessageId);
+              const toolCall = msg?.toolCalls?.find(tc => tc.name === event.tool_name && tc.status === 'running');
+              if (toolCall) {
+                assistantStore.updateToolCall(assistantMessageId, toolCall.id, {
+                  status: 'completed',
+                  result: event.tool_result
+                });
+              }
+              break;
+            case 'done':
+              assistantStore.completeStreaming(assistantMessageId);
+              assistantStore.setSending(false);
+              cleanupRef.current = null;
+              break;
+            case 'error':
+              assistantStore.updateMessage(assistantMessageId, {
+                pending: false,
+                streaming: false,
+                error: event.content || 'Unknown error'
+              });
+              assistantStore.setSending(false);
+              cleanupRef.current = null;
+              break;
+          }
+        },
+        onError: (error) => {
+          assistantStore.updateMessage(assistantMessageId, {
+            pending: false,
+            streaming: false,
+            error
+          });
+          assistantStore.setSending(false);
+          cleanupRef.current = null;
+        },
+        onComplete: () => {
+          cleanupRef.current = null;
+        }
+      }
+    );
+
+    cleanupRef.current = cleanup;
+  }, [activeUrl, selectedText, pageContext, mode, conversationId]);
+
+  const handleSendNonStreaming = useCallback(async (message: string, assistantMessageId: string) => {
+    try {
+      const response = await window.electronAPI.assistant.sendMessage(message, {
+        url: pageContext?.url ?? activeUrl ?? null,
+        selectedText: pageContext?.selectedText ?? selectedText ?? null
+      }, mode, conversationId);
+
+      if (response?.error) {
+        assistantStore.updateMessage(assistantMessageId, {
+          pending: false,
+          error: response.error,
+          content: ''
+        });
+      } else {
+        assistantStore.updateMessage(assistantMessageId, {
+          pending: false,
+          content: response?.response ?? ''
+        });
+      }
+    } catch (err) {
+      assistantStore.updateMessage(assistantMessageId, {
+        pending: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+        content: ''
+      });
+    } finally {
+      assistantStore.setSending(false);
+    }
+  }, [activeUrl, selectedText, pageContext, mode, conversationId]);
+
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
@@ -102,7 +236,8 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
     assistantStore.addMessage({
       id: userMessageId,
       role: 'user',
-      content: trimmed
+      content: trimmed,
+      mode
     });
 
     // Add pending assistant message
@@ -111,39 +246,23 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
       id: assistantMessageId,
       role: 'assistant',
       content: '',
-      pending: true
+      pending: true,
+      streaming: useStreaming,
+      mode
     });
 
     setInput('');
     assistantStore.setSending(true);
 
-    try {
-        const response = await window.electronAPI.assistant.sendMessage(trimmed, {
-            url: pageContext?.url ?? activeUrl ?? null,
-            selectedText: pageContext?.selectedText ?? selectedText ?? null
-        });
-
-        if (response?.error) {
-            assistantStore.updateMessage(assistantMessageId, {
-                pending: false,
-                error: response.error,
-                content: ''
-            });
-        } else {
-            assistantStore.updateMessage(assistantMessageId, {
-                pending: false,
-                content: response?.response ?? ''
-            });
-        }
-    } catch (err) {
-        assistantStore.updateMessage(assistantMessageId, {
-            pending: false,
-            error: err instanceof Error ? err.message : 'Unknown error',
-            content: ''
-        });
-    } finally {
-        assistantStore.setSending(false);
+    if (useStreaming) {
+      await handleSendStreaming(trimmed, assistantMessageId);
+    } else {
+      await handleSendNonStreaming(trimmed, assistantMessageId);
     }
+  };
+
+  const handleConnect = async () => {
+    await assistantStore.connect();
   };
 
   const handleModeChange = (newMode: AssistantMode) => {
@@ -157,6 +276,54 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
 
   const currentModeConfig = MODE_CONFIG[mode];
   const CurrentModeIcon = currentModeConfig.icon;
+
+  // Tool call display component
+  const ToolCallDisplay = ({ toolCall }: { toolCall: ToolCall }) => {
+    const [expanded, setExpanded] = useState(false);
+    
+    return (
+      <div className="mt-2 p-2 bg-white/5 rounded border border-white/10 text-xs">
+        <button 
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-2 w-full text-left"
+        >
+          <ChevronRight 
+            size={12} 
+            className={cn("text-white/40 transition-transform", expanded && "rotate-90")} 
+          />
+          <span className="text-white/60 font-mono">{toolCall.name}</span>
+          {toolCall.status === 'running' && (
+            <Loader2 size={10} className="animate-spin text-amber-400 ml-auto" />
+          )}
+          {toolCall.status === 'completed' && (
+            <Check size={10} className="text-emerald-400 ml-auto" />
+          )}
+          {toolCall.status === 'error' && (
+            <AlertCircle size={10} className="text-red-400 ml-auto" />
+          )}
+        </button>
+        {expanded && (
+          <div className="mt-2 pl-4 border-l border-white/10">
+            {Object.keys(toolCall.args).length > 0 && (
+              <div className="mb-1">
+                <span className="text-white/40">Args: </span>
+                <code className="text-white/60">{JSON.stringify(toolCall.args)}</code>
+              </div>
+            )}
+            {toolCall.result && (
+              <div>
+                <span className="text-white/40">Result: </span>
+                <code className="text-white/60">{toolCall.result}</code>
+              </div>
+            )}
+            {toolCall.error && (
+              <div className="text-red-400">{toolCall.error}</div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
   
   // Tab styles
   const TabButton = ({ tab, label }: { tab: AssistantTab; label: string }) => (
@@ -197,9 +364,37 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
             <TabButton tab="chat" label="Chat" />
             <TabButton tab="workflows" label="Workflows" />
          </div>
-         <button onClick={() => assistantStore.close()} className="p-2 text-white/50 hover:text-white transition-colors">
-            <X size={16} />
-         </button>
+         <div className="flex items-center gap-2">
+            {/* Connection status for agent mode */}
+            {mode === 'agent' && (
+              <button 
+                onClick={handleConnect}
+                className={cn(
+                  "flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors",
+                  connectionStatus.connected 
+                    ? "text-emerald-400 bg-emerald-400/10" 
+                    : "text-white/40 bg-white/5 hover:bg-white/10"
+                )}
+                title={connectionStatus.connected ? `Connected: ${connectionStatus.pageUrl}` : 'Click to connect'}
+              >
+                {connectionStatus.connected ? <Wifi size={12} /> : <WifiOff size={12} />}
+                <span>{connectionStatus.connected ? 'Connected' : 'Connect'}</span>
+              </button>
+            )}
+            {/* Clear chat button */}
+            {messages.length > 0 && (
+              <button 
+                onClick={() => assistantStore.clearMessages()}
+                className="p-1.5 text-white/40 hover:text-white/70 hover:bg-white/5 rounded transition-colors"
+                title="Clear chat"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+            <button onClick={() => assistantStore.close()} className="p-2 text-white/50 hover:text-white transition-colors">
+               <X size={16} />
+            </button>
+         </div>
       </div>
 
       {/* Content Area */}
@@ -229,13 +424,44 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
                             <div className={`p-2 rounded-full flex-shrink-0 ${msg.role === 'user' ? 'bg-purple-600 text-white' : 'bg-white/10 text-white/70'}`}>
                                 {msg.role === 'user' ? <User size={14} /> : <Bot size={14} />}
                             </div>
-                            <div className={`p-3 rounded-lg ${msg.role === 'user' 
-                                ? 'bg-purple-600/20 border border-purple-500/30 text-purple-100' 
-                                : 'bg-white/5 border border-white/10 text-white/90'} overflow-hidden`}>
+                            <div className={cn(
+                                "p-3 rounded-lg overflow-hidden",
+                                msg.role === 'user' 
+                                    ? 'bg-purple-600/20 border border-purple-500/30 text-purple-100' 
+                                    : msg.mode === 'agent'
+                                    ? 'bg-emerald-500/10 border border-emerald-500/20 text-white/90'
+                                    : msg.mode === 'plan'
+                                    ? 'bg-purple-500/10 border border-purple-500/20 text-white/90'
+                                    : 'bg-white/5 border border-white/10 text-white/90'
+                            )}>
+                                {/* Mode badge for assistant messages */}
+                                {msg.role === 'assistant' && msg.mode && (
+                                    <div className="flex items-center gap-1 mb-2">
+                                        <span className={cn(
+                                            "text-[10px] px-1.5 py-0.5 rounded",
+                                            MODE_CONFIG[msg.mode].color,
+                                            "bg-white/5"
+                                        )}>
+                                            {msg.mode}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="prose prose-sm max-w-none prose-invert break-words text-sm whitespace-pre-wrap">
-                                    {msg.content || (msg.pending ? <span className="animate-pulse">Thinking...</span> : '')}
+                                    {msg.content || (msg.pending && !msg.streaming ? <span className="animate-pulse">Thinking...</span> : '')}
+                                    {/* Streaming cursor */}
+                                    {msg.streaming && (
+                                        <span className="inline-block w-2 h-4 bg-white/60 ml-0.5 animate-pulse" />
+                                    )}
                                     {msg.error && <span className="text-red-400 block mt-1">Error: {msg.error}</span>}
                                 </div>
+                                {/* Tool calls */}
+                                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                                    <div className="mt-2 space-y-1">
+                                        {msg.toolCalls.map((tc) => (
+                                            <ToolCallDisplay key={tc.id} toolCall={tc} />
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -302,14 +528,32 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
                         </button>
                     </div>
 
-                    {/* Right: Submit */}
+                    {/* Right: Submit / Cancel */}
                     <div className="flex items-center gap-2">
                         {isSending ? (
                             <button 
-                                className="p-1.5 bg-white/10 text-white/50 rounded-md cursor-not-allowed"
-                                disabled
+                                onClick={() => {
+                                    if (cleanupRef.current) {
+                                        cleanupRef.current();
+                                        cleanupRef.current = null;
+                                    }
+                                    assistantStore.setSending(false);
+                                    // Mark any streaming messages as cancelled
+                                    const state = assistantStore.getState();
+                                    state.messages.forEach(msg => {
+                                        if (msg.streaming) {
+                                            assistantStore.updateMessage(msg.id, {
+                                                streaming: false,
+                                                pending: false,
+                                                content: msg.content + '\n\n[Cancelled]'
+                                            });
+                                        }
+                                    });
+                                }}
+                                className="p-1.5 bg-red-500/20 text-red-400 rounded-md hover:bg-red-500/30 transition-colors"
+                                title="Cancel"
                             >
-                                <Loader2 size={14} className="animate-spin" />
+                                <X size={14} />
                             </button>
                         ) : (
                              <button 

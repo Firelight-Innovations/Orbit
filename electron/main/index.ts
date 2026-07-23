@@ -6,8 +6,8 @@ import { PythonBackend } from './python'
 import { closeSearchHistoryService, getSearchHistoryService } from './services/searchHistory'
 import { closeSearchSuggestionsService } from './services/searchSuggestions'
 import { closeAISearchService } from './services/aiSearchService'
-
 // Enable remote debugging on a fixed port so Playwright can attach
+// Note: Port 9222 is freed by scripts/free-port.js before Electron starts
 app.commandLine.appendSwitch('remote-debugging-port', '9222')
 
 // Get the app icon path
@@ -43,6 +43,8 @@ const tabViews = new Map<string, WebContentsView>()
 const windowTabViews = new Map<number, Set<string>>()
 // Map of windowId -> UI WebContentsView (the React app)
 const uiViews = new Map<number, WebContentsView>()
+// Map of windowId -> sidebar WebContentsView (the assistant, its own renderer)
+const sidebarViews = new Map<number, WebContentsView>()
 let pythonBackend: PythonBackend | null = null
 let debuggingPort: number | null = 9222
 
@@ -119,6 +121,64 @@ function bringUIToFront(window: BrowserWindow): void {
     // Remove and re-add UI view to bring it to front
     window.contentView.removeChildView(uiView)
     window.contentView.addChildView(uiView)
+  }
+  // Keep the sidebar view above the UI view so it stays interactive
+  const sidebarView = sidebarViews.get(window.id)
+  if (sidebarView) {
+    window.contentView.removeChildView(sidebarView)
+    window.contentView.addChildView(sidebarView)
+  }
+}
+
+// Position the sidebar view in the right column below the header
+function updateSidebarViewBounds(window: BrowserWindow): void {
+  const sidebarView = sidebarViews.get(window.id)
+  if (!sidebarView) return
+
+  const bounds = window.getContentBounds()
+  sidebarView.setBounds({
+    x: bounds.width - ASSISTANT_WIDTH,
+    y: HEADER_HEIGHT,
+    width: ASSISTANT_WIDTH,
+    height: bounds.height - HEADER_HEIGHT
+  })
+}
+
+// Focus the active tab's web content (returns keyboard/scroll to the page)
+function focusActiveTab(window: BrowserWindow): void {
+  const state = windowStates.get(window.id)
+  if (!state?.activeTabId) return
+  const view = tabViews.get(state.activeTabId)
+  view?.webContents.focus()
+}
+
+// Focus the sidebar view (so its input is immediately typable)
+function focusSidebar(window: BrowserWindow): void {
+  const sidebarView = sidebarViews.get(window.id)
+  sidebarView?.webContents.focus()
+}
+
+// Send page context to a window's sidebar view (main -> sidebar renderer)
+function sendAssistantContext(
+  windowId: number,
+  context: { url?: string | null; selectedText?: string | null }
+): void {
+  const sidebarView = sidebarViews.get(windowId)
+  if (sidebarView && !sidebarView.webContents.isDestroyed()) {
+    sidebarView.webContents.send('assistant:context', context)
+  }
+}
+
+// Notify both renderers that the assistant open-state changed, so each store
+// stays in sync no matter which view triggered the toggle.
+function broadcastAssistantOpen(windowId: number, isOpen: boolean): void {
+  const uiView = uiViews.get(windowId)
+  if (uiView && !uiView.webContents.isDestroyed()) {
+    uiView.webContents.send('assistant:openChanged', isOpen)
+  }
+  const sidebarView = sidebarViews.get(windowId)
+  if (sidebarView && !sidebarView.webContents.isDestroyed()) {
+    sidebarView.webContents.send('assistant:openChanged', isOpen)
   }
 }
 
@@ -403,6 +463,9 @@ function broadcastTabUpdate(windowId: number, state: WindowState): void {
   if (uiView) {
     uiView.webContents.send('tabs:updated', state)
   }
+  // Keep the assistant sidebar's active URL in sync with the foreground tab.
+  const activeTab = state.tabs.find((t) => t.id === state.activeTabId)
+  sendAssistantContext(windowId, { url: activeTab?.url ?? null })
 }
 
 function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
@@ -443,6 +506,28 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
   // Set UI view bounds to cover full window
   updateUIViewBounds(mainWindow, uiView)
 
+  // Create the sidebar WebContentsView (assistant) - its own renderer, layered
+  // ABOVE the UI view so it owns its right-hand column and never fights the
+  // content view for clicks/focus.
+  const sidebarView = new WebContentsView({
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+  sidebarViews.set(mainWindow.id, sidebarView)
+  mainWindow.contentView.addChildView(sidebarView)
+  sidebarView.setVisible(false)
+  updateSidebarViewBounds(mainWindow)
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    sidebarView.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/sidebar.html`)
+  } else {
+    sidebarView.webContents.loadFile(join(__dirname, '../renderer/sidebar.html'))
+  }
+
   // Initialize window state
   const defaultTab: TabInfo = {
     id: `tab-${Date.now()}`,
@@ -469,7 +554,10 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
   mainWindow.on('resize', () => {
     // Update UI view bounds
     updateUIViewBounds(mainWindow, uiView)
-    
+
+    // Update sidebar view bounds
+    updateSidebarViewBounds(mainWindow)
+
     // Update tab view bounds
     const windowTabs = windowTabViews.get(mainWindow.id)
     if (windowTabs) {
@@ -493,6 +581,7 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
       windowTabViews.delete(mainWindow.id)
     }
     uiViews.delete(mainWindow.id)
+    sidebarViews.delete(mainWindow.id)
     windowStates.delete(mainWindow.id)
   })
 
@@ -535,6 +624,7 @@ app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.orbit.app')
 
+  // Port 9222 is freed by the predev script before Electron starts
   console.log(`Remote debugging enabled on port ${debuggingPort}`)
 
   // Start Python backend
@@ -608,6 +698,12 @@ export {
   normalizeUrl,
   broadcastTabUpdate,
   setUIViewFullscreen,
+  updateSidebarViewBounds,
+  focusActiveTab,
+  focusSidebar,
+  sendAssistantContext,
+  broadcastAssistantOpen,
+  sidebarViews,
   HEADER_HEIGHT
 }
 export type { TabInfo, WindowState }

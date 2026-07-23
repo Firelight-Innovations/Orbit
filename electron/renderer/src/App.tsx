@@ -7,8 +7,7 @@ import { WelcomeScreen } from './components/Welcome/WelcomeScreen'
 import { ProfilesPage } from './components/Profiles/ProfilesPage'
 import { SearchPage } from './components/Search/SearchPage'
 import orbitLogo from './assets/orbit_logo.png'
-import { AssistantSidebar } from './components/Assistant/AssistantSidebar'
-import { assistantStore, useAssistantStore } from './stores/assistantStore'
+import { assistantStore } from './stores/assistantStore'
 
 // Height of header (title bar + navigation bar + bookmarks bar) - must match HEADER_HEIGHT in main process
 const HEADER_HEIGHT = 112
@@ -36,8 +35,6 @@ function App() {
   
   // Attention-based focus system: when true, web content receives all mouse events
   const [webContentHasAttention, setWebContentHasAttention] = useState(false)
-  const [selectedText, setSelectedText] = useState<string | null>(null)
-  const isAssistantOpen = useAssistantStore((s) => s.isOpen)
 
   useEffect(() => {
     // Check if onboarding is complete
@@ -96,28 +93,35 @@ function App() {
     window.electronAPI.setUIIgnoreMouseEvents(true)
   }
 
-  // Mouse tracking to exit attention mode when mouse enters header area or assistant sidebar
+  // Keep this view's assistant store in sync when the sidebar view (a separate
+  // renderer) opens/closes the assistant, so Ctrl/Cmd+K toggling stays correct.
+  useEffect(() => {
+    return window.electronAPI.assistant.onOpenChanged((isOpen) => {
+      assistantStore.syncOpen(isOpen)
+    })
+  }, [])
+
+  // Mouse tracking to exit attention mode when the mouse enters the header.
+  // The assistant sidebar is now its own WebContentsView, so it no longer
+  // participates in this heuristic.
   useEffect(() => {
     // Only track when web content has attention and on external pages
     if (!webContentHasAttention || isInternalPage) return
 
     const handleMouseMove = (e: MouseEvent) => {
-      // When mouse enters header area or assistant sidebar area, remove attention from web content
-      const inHeader = e.clientY < HEADER_HEIGHT
-      const inAssistant = isAssistantOpen && e.clientX > window.innerWidth - 420
-      
-      if (inHeader || inAssistant) {
+      // When the mouse enters the header area, remove attention from web content
+      if (e.clientY < HEADER_HEIGHT) {
         setWebContentHasAttention(false)
         window.electronAPI.setUIIgnoreMouseEvents(false)
       }
     }
 
     document.addEventListener('mousemove', handleMouseMove)
-    
+
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
     }
-  }, [webContentHasAttention, isInternalPage, isAssistantOpen])
+  }, [webContentHasAttention, isInternalPage])
 
   // Reset attention when switching tabs or pages
   useEffect(() => {
@@ -125,12 +129,12 @@ function App() {
     window.electronAPI.setUIIgnoreMouseEvents(false)
   }, [activeTab?.id, isInternalPage])
 
-  // Capture selected text via context menu to share with assistant
+  // Capture selected text via context menu and relay it to the sidebar view
+  // (a separate renderer) through the main process.
   useEffect(() => {
     const handleContextMenu = () => {
       const selection = window.getSelection()?.toString().trim()
-      setSelectedText(selection || null)
-      assistantStore.setPageContext({
+      window.electronAPI.assistant.updateContext({
         url: activeTab?.url ?? null,
         selectedText: selection || null
       })
@@ -205,21 +209,17 @@ function App() {
       <NavigationBar activeTab={activeTab ?? null} onNavigate={handleNavigate} />
       {showBookmarksBar && <BookmarksBar onNavigate={handleNavigate} />}
       <main className="app-content flex">
-        <div
-          className="flex-1"
-          style={{
-            width: isAssistantOpen ? 'calc(100% - 420px)' : '100%',
-            transition: 'width 180ms ease'
-          }}
-        >
+        <div className="flex-1">
           {/* Only render React content for internal pages (orbit://) */}
           {/* External pages are rendered by WebContentsView overlay from main process */}
+          {/* The assistant sidebar is its own WebContentsView (main process); the */}
+          {/* tab view is already inset by ASSISTANT_WIDTH when it's open. */}
           {isInternalPage ? (
             renderContent()
           ) : (
             // Placeholder for external pages - WebContentsView renders behind
             // Click to give attention to web content, then pointer-events: none to let clicks through
-            <div 
+            <div
               className="browser-view-placeholder h-full"
               onClick={handleContentClick}
               style={{ pointerEvents: webContentHasAttention ? 'none' : 'auto', cursor: webContentHasAttention ? 'default' : 'pointer' }}
@@ -233,13 +233,6 @@ function App() {
             </div>
           )}
         </div>
-        {isAssistantOpen && (
-          <AssistantSidebar
-            activeUrl={activeTab?.url ?? null}
-            selectedText={selectedText}
-            topOffset={HEADER_HEIGHT}
-          />
-        )}
       </main>
     </div>
   )

@@ -185,13 +185,95 @@ contextBridge.exposeInMainWorld('electronAPI', {
   assistant: {
     sendMessage: (
       message: string,
-      pageContext?: { url?: string | null; selectedText?: string | null }
+      pageContext?: { url?: string | null; selectedText?: string | null },
+      mode?: 'ask' | 'agent' | 'plan',
+      conversationId?: string
     ) =>
       ipcRenderer.invoke('assistant:sendMessage', {
         message,
-        pageContext
+        pageContext,
+        mode,
+        conversationId
       }),
-    setState: (isOpen: boolean) => ipcRenderer.invoke('assistant:setState', isOpen)
+
+    // Streaming API
+    sendMessageStream: (
+      message: string,
+      pageContext: { url?: string | null; selectedText?: string | null } | undefined,
+      mode: 'ask' | 'agent' | 'plan',
+      conversationId: string,
+      callbacks: {
+        onEvent: (event: { type: string; content?: string; tool_name?: string; tool_args?: Record<string, unknown>; tool_result?: string }) => void
+        onError?: (error: string) => void
+        onComplete?: () => void
+      }
+    ) => {
+      // Send the request
+      ipcRenderer.send('assistant:sendMessageStream', {
+        message,
+        pageContext,
+        mode,
+        conversationId
+      })
+
+      // Handle stream events
+      const eventHandler = (
+        _event: Electron.IpcRendererEvent,
+        data: { type: string; content?: string; tool_name?: string; tool_args?: Record<string, unknown>; tool_result?: string }
+      ) => {
+        callbacks.onEvent(data)
+        
+        if (data.type === 'done') {
+          callbacks.onComplete?.()
+          cleanup()
+        } else if (data.type === 'error') {
+          callbacks.onError?.(data.content || 'Unknown error')
+          cleanup()
+        }
+      }
+
+      ipcRenderer.on('assistant:streamEvent', eventHandler)
+
+      // Cleanup function
+      const cleanup = () => {
+        ipcRenderer.removeListener('assistant:streamEvent', eventHandler)
+      }
+
+      // Return cleanup function for manual cancellation
+      return cleanup
+    },
+
+    // Connection management
+    connect: () => ipcRenderer.invoke('assistant:connect'),
+    getStatus: () => ipcRenderer.invoke('assistant:getStatus'),
+
+    setState: (isOpen: boolean) => ipcRenderer.invoke('assistant:setState', isOpen),
+
+    // Cross-view page context (main -> sidebar view). The sidebar renderer is
+    // a separate WebContentsView and can't read the main App state directly.
+    onContext: (
+      callback: (context: { url?: string | null; selectedText?: string | null }) => void
+    ) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        context: { url?: string | null; selectedText?: string | null }
+      ) => callback(context)
+      ipcRenderer.on('assistant:context', handler)
+      return () => ipcRenderer.removeListener('assistant:context', handler)
+    },
+
+    // Push page context (e.g. a text selection) from the main view to the
+    // sidebar view, relayed through the main process.
+    updateContext: (context: { url?: string | null; selectedText?: string | null }) =>
+      ipcRenderer.send('assistant:updateContext', context),
+
+    // Notified when the assistant is opened/closed by either view, so a
+    // renderer can keep its own store in sync (see assistantStore.syncOpen).
+    onOpenChanged: (callback: (isOpen: boolean) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, isOpen: boolean) => callback(isOpen)
+      ipcRenderer.on('assistant:openChanged', handler)
+      return () => ipcRenderer.removeListener('assistant:openChanged', handler)
+    }
   },
 
   // Profile Management
@@ -334,12 +416,39 @@ declare global {
       assistant: {
         sendMessage: (
           message: string,
-          pageContext?: { url?: string | null; selectedText?: string | null }
+          pageContext?: { url?: string | null; selectedText?: string | null },
+          mode?: 'ask' | 'agent' | 'plan',
+          conversationId?: string
         ) => Promise<{
           response?: string
           took_ms?: number
           error?: string
         }>
+        sendMessageStream: (
+          message: string,
+          pageContext: { url?: string | null; selectedText?: string | null } | undefined,
+          mode: 'ask' | 'agent' | 'plan',
+          conversationId: string,
+          callbacks: {
+            onEvent: (event: {
+              type: string
+              content?: string
+              tool_name?: string
+              tool_args?: Record<string, unknown>
+              tool_result?: string
+            }) => void
+            onError?: (error: string) => void
+            onComplete?: () => void
+          }
+        ) => () => void
+        connect: () => Promise<{ connected: boolean; page_url?: string; error?: string }>
+        getStatus: () => Promise<{ connected: boolean; page_url?: string }>
+        setState: (isOpen: boolean) => Promise<void>
+        onContext: (
+          callback: (context: { url?: string | null; selectedText?: string | null }) => void
+        ) => () => void
+        updateContext: (context: { url?: string | null; selectedText?: string | null }) => void
+        onOpenChanged: (callback: (isOpen: boolean) => void) => () => void
       }
       profile: {
         isFirstLaunch: () => Promise<boolean>
