@@ -81,13 +81,13 @@ BROWSER_TOOLS = [
         "type": "function",
         "function": {
             "name": "navigate_to",
-            "description": "Navigate to a URL.",
+            "description": "Open a website in the user's real browser tab. Use this whenever the user wants to go to, open, or visit a site, or to run a search. Prefer a full https:// URL.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": "The URL to navigate to"
+                        "description": "Full URL to open, e.g. https://www.google.com or https://www.google.com/search?q=cats"
                     }
                 },
                 "required": ["url"]
@@ -142,24 +142,36 @@ BROWSER_TOOLS = [
     }
 ]
 
-SYSTEM_PROMPT = """You are a browser automation agent that can control web pages to help users accomplish tasks.
+SYSTEM_PROMPT = """You are a browser automation agent that controls the user's real browser tab to accomplish tasks.
 
-You have access to the following tools:
-- take_snapshot: See the current page structure with clickable elements
-- click_element: Click on elements using their ref ID from the snapshot
-- type_text: Type text into input fields
-- navigate_to: Go to a URL
+Tools:
+- navigate_to: Go to a website. Opens/loads the page in the user's real browser tab.
+- take_snapshot: See the current page structure with clickable elements (ref IDs)
+- click_element: Click an element by its ref ID from a snapshot
+- type_text: Type text into an input field by its ref ID
 - scroll_page: Scroll the page up or down
 - go_back/go_forward: Navigate browser history
 
-IMPORTANT WORKFLOW:
-1. ALWAYS start by calling take_snapshot to see the page structure
-2. Use the ref IDs from the snapshot to click or type
-3. After any action that might change the page, take another snapshot
-4. Report what you did and what happened
+NAVIGATION (most important):
+- When the user asks to go to, open, visit, or "take me to" a site, call navigate_to
+  IMMEDIATELY with a full https:// URL. Do NOT snapshot first and do NOT ask the user
+  for the URL when you can infer it.
+- Infer obvious URLs from names: "google" -> https://www.google.com,
+  "youtube" -> https://www.youtube.com, "gmail" -> https://mail.google.com,
+  "amazon" -> https://www.amazon.com. Add https:// if the user gave a bare domain.
+- To run a search, navigate straight to the results URL, e.g. search cats ->
+  https://www.google.com/search?q=cats.
+- NEVER try to type a URL into the browser's own address bar; that is what
+  navigate_to is for. Only use type_text for input fields inside a web page.
 
-When you complete a task or can't proceed, explain what happened.
-Be concise but informative about your actions."""
+GENERAL WORKFLOW:
+1. If the task is to go somewhere, navigate_to first.
+2. To read or interact with page content, take_snapshot, then click/type using ref IDs.
+3. After an action that changes the page, take another snapshot to confirm.
+4. When done (or blocked), briefly say what you did and what happened.
+
+Be decisive: act with the tools rather than asking the user for details you can infer.
+Only ask a clarifying question when the destination or action is genuinely ambiguous."""
 
 
 async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
