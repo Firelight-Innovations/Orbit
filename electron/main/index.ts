@@ -5,6 +5,17 @@ import { setupIpcHandlers } from './ipc'
 import { PythonBackend } from './python'
 import { closeSearchHistoryService, getSearchHistoryService } from './services/searchHistory'
 import { closeSearchSuggestionsService } from './services/searchSuggestions'
+import { closeAISearchService } from './services/aiSearchService'
+// Enable remote debugging on a fixed port so Playwright can attach
+// Note: Port 9222 is freed by scripts/free-port.js before Electron starts
+app.commandLine.appendSwitch('remote-debugging-port', '9222')
+
+// Disable Electron's prewarmed "spare" renderer so it can't surface as an
+// extra empty-URL CDP page target. (Note: the main hang was the window's own
+// root webContents having no document — fixed by loading a blank doc into it
+// in createWindow. This switch just keeps stray spare renderers from adding
+// more unresponsive targets for Playwright's connect_over_cdp() to attach to.)
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess')
 
 // Get the app icon path
 const iconPath = join(__dirname, '../../resources/orbit_logo.png')
@@ -24,10 +35,13 @@ interface WindowState {
   id: number
   tabs: TabInfo[]
   activeTabId: string | null
+  isAssistantOpen?: boolean
 }
 
 // Height of title bar + navigation bar + bookmarks bar in pixels
 const HEADER_HEIGHT = 112
+// Width of assistant sidebar when open
+const ASSISTANT_WIDTH = 420
 
 const windowStates = new Map<number, WindowState>()
 // Map of tabId -> WebContentsView for each browser tab
@@ -36,7 +50,10 @@ const tabViews = new Map<string, WebContentsView>()
 const windowTabViews = new Map<number, Set<string>>()
 // Map of windowId -> UI WebContentsView (the React app)
 const uiViews = new Map<number, WebContentsView>()
+// Map of windowId -> sidebar WebContentsView (the assistant, its own renderer)
+const sidebarViews = new Map<number, WebContentsView>()
 let pythonBackend: PythonBackend | null = null
+let debuggingPort: number | null = 9222
 
 // Helper to check if URL is internal (orbit://) or external (http/https)
 function isInternalUrl(url: string): boolean {
@@ -66,10 +83,14 @@ function updateUIViewBounds(window: BrowserWindow, uiView: WebContentsView): voi
 // Update bounds of a tab view to fill the content area below the header
 function updateTabViewBounds(window: BrowserWindow, view: WebContentsView): void {
   const bounds = window.getContentBounds()
+  const state = windowStates.get(window.id)
+  const isAssistantOpen = state?.isAssistantOpen ?? false
+  const contentWidth = isAssistantOpen ? bounds.width - ASSISTANT_WIDTH : bounds.width
+  
   view.setBounds({
     x: 0,
     y: HEADER_HEIGHT,
-    width: bounds.width,
+    width: contentWidth,
     height: bounds.height - HEADER_HEIGHT
   })
 }
@@ -107,6 +128,64 @@ function bringUIToFront(window: BrowserWindow): void {
     // Remove and re-add UI view to bring it to front
     window.contentView.removeChildView(uiView)
     window.contentView.addChildView(uiView)
+  }
+  // Keep the sidebar view above the UI view so it stays interactive
+  const sidebarView = sidebarViews.get(window.id)
+  if (sidebarView) {
+    window.contentView.removeChildView(sidebarView)
+    window.contentView.addChildView(sidebarView)
+  }
+}
+
+// Position the sidebar view in the right column below the header
+function updateSidebarViewBounds(window: BrowserWindow): void {
+  const sidebarView = sidebarViews.get(window.id)
+  if (!sidebarView) return
+
+  const bounds = window.getContentBounds()
+  sidebarView.setBounds({
+    x: bounds.width - ASSISTANT_WIDTH,
+    y: HEADER_HEIGHT,
+    width: ASSISTANT_WIDTH,
+    height: bounds.height - HEADER_HEIGHT
+  })
+}
+
+// Focus the active tab's web content (returns keyboard/scroll to the page)
+function focusActiveTab(window: BrowserWindow): void {
+  const state = windowStates.get(window.id)
+  if (!state?.activeTabId) return
+  const view = tabViews.get(state.activeTabId)
+  view?.webContents.focus()
+}
+
+// Focus the sidebar view (so its input is immediately typable)
+function focusSidebar(window: BrowserWindow): void {
+  const sidebarView = sidebarViews.get(window.id)
+  sidebarView?.webContents.focus()
+}
+
+// Send page context to a window's sidebar view (main -> sidebar renderer)
+function sendAssistantContext(
+  windowId: number,
+  context: { url?: string | null; selectedText?: string | null }
+): void {
+  const sidebarView = sidebarViews.get(windowId)
+  if (sidebarView && !sidebarView.webContents.isDestroyed()) {
+    sidebarView.webContents.send('assistant:context', context)
+  }
+}
+
+// Notify both renderers that the assistant open-state changed, so each store
+// stays in sync no matter which view triggered the toggle.
+function broadcastAssistantOpen(windowId: number, isOpen: boolean): void {
+  const uiView = uiViews.get(windowId)
+  if (uiView && !uiView.webContents.isDestroyed()) {
+    uiView.webContents.send('assistant:openChanged', isOpen)
+  }
+  const sidebarView = sidebarViews.get(windowId)
+  if (sidebarView && !sidebarView.webContents.isDestroyed()) {
+    sidebarView.webContents.send('assistant:openChanged', isOpen)
   }
 }
 
@@ -391,6 +470,9 @@ function broadcastTabUpdate(windowId: number, state: WindowState): void {
   if (uiView) {
     uiView.webContents.send('tabs:updated', state)
   }
+  // Keep the assistant sidebar's active URL in sync with the foreground tab.
+  const activeTab = state.tabs.find((t) => t.id === state.activeTabId)
+  sendAssistantContext(windowId, { url: activeTab?.url ?? null })
 }
 
 function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
@@ -406,6 +488,19 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
     backgroundColor: '#0f0f0f',
     icon: iconPath
   })
+
+  // Load a blank document into the window's root webContents. All real content
+  // lives in child WebContentsViews (UI/sidebar/tabs), so the root would
+  // otherwise stay a document-less "empty URL" page target. Playwright's
+  // connect_over_cdp() auto-attaches to every page target and blocks forever on
+  // that one (Page.enable/Runtime.enable never respond), hanging the AI agent's
+  // browser connection for the full timeout. Giving the root a real (dark,
+  // to match backgroundColor and avoid a white flash behind the transparent UI)
+  // document makes it respond immediately so the connection succeeds.
+  mainWindow.loadURL(
+    'data:text/html,' +
+      encodeURIComponent('<!doctype html><meta charset="utf-8"><body style="margin:0;background:#0f0f0f"></body>')
+  )
 
   // Create the UI WebContentsView (React app) - this will be on TOP
   const uiView = new WebContentsView({
@@ -430,6 +525,28 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
 
   // Set UI view bounds to cover full window
   updateUIViewBounds(mainWindow, uiView)
+
+  // Create the sidebar WebContentsView (assistant) - its own renderer, layered
+  // ABOVE the UI view so it owns its right-hand column and never fights the
+  // content view for clicks/focus.
+  const sidebarView = new WebContentsView({
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+  sidebarViews.set(mainWindow.id, sidebarView)
+  mainWindow.contentView.addChildView(sidebarView)
+  sidebarView.setVisible(false)
+  updateSidebarViewBounds(mainWindow)
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    sidebarView.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/sidebar.html`)
+  } else {
+    sidebarView.webContents.loadFile(join(__dirname, '../renderer/sidebar.html'))
+  }
 
   // Initialize window state
   const defaultTab: TabInfo = {
@@ -457,7 +574,10 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
   mainWindow.on('resize', () => {
     // Update UI view bounds
     updateUIViewBounds(mainWindow, uiView)
-    
+
+    // Update sidebar view bounds
+    updateSidebarViewBounds(mainWindow)
+
     // Update tab view bounds
     const windowTabs = windowTabViews.get(mainWindow.id)
     if (windowTabs) {
@@ -481,6 +601,7 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
       windowTabViews.delete(mainWindow.id)
     }
     uiViews.delete(mainWindow.id)
+    sidebarViews.delete(mainWindow.id)
     windowStates.delete(mainWindow.id)
   })
 
@@ -504,8 +625,13 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
       showTabView(mainWindow, activeTabId)
     }
 
-    // Open DevTools on launch so a debugging console is always available
-    uiView.webContents.openDevTools({ mode: 'detach' })
+    // Open DevTools on launch only when explicitly requested. An open DevTools
+    // window shows up as a `devtools://` CDP page target that Playwright's
+    // connect_over_cdp() tries to auto-attach to and hangs on (15s timeout),
+    // which breaks the AI agent's browser connection. Opt in with ORBIT_DEVTOOLS=1.
+    if (process.env['ORBIT_DEVTOOLS'] === '1') {
+      uiView.webContents.openDevTools({ mode: 'detach' })
+    }
   })
 
   // Watch shortcuts for dev tools
@@ -522,6 +648,9 @@ function createWindowWithTabs(tabs: TabInfo[]): BrowserWindow {
 app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.orbit.app')
+
+  // Port 9222 is freed by the predev script before Electron starts
+  console.log(`Remote debugging enabled on port ${debuggingPort}`)
 
   // Start Python backend
   pythonBackend = new PythonBackend()
@@ -552,10 +681,34 @@ app.on('window-all-closed', async () => {
   // Close search suggestions service
   closeSearchSuggestionsService()
 
+  // Close AI search service
+  closeAISearchService()
+
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
+
+// Export debugging port getter
+export function getDebuggingPort(): number | null {
+  return debuggingPort
+}
+
+// Update all tab view bounds for a window (called when assistant opens/closes)
+export function updateAllTabViewBounds(windowId: number): void {
+  const window = BrowserWindow.fromId(windowId)
+  if (!window) return
+
+  const windowTabs = windowTabViews.get(windowId)
+  if (windowTabs) {
+    for (const tabId of windowTabs) {
+      const view = tabViews.get(tabId)
+      if (view) {
+        updateTabViewBounds(window, view)
+      }
+    }
+  }
+}
 
 // Export for IPC access
 export {
@@ -570,6 +723,12 @@ export {
   normalizeUrl,
   broadcastTabUpdate,
   setUIViewFullscreen,
+  updateSidebarViewBounds,
+  focusActiveTab,
+  focusSidebar,
+  sendAssistantContext,
+  broadcastAssistantOpen,
+  sidebarViews,
   HEADER_HEIGHT
 }
 export type { TabInfo, WindowState }

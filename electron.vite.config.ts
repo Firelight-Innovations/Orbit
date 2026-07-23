@@ -28,7 +28,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'electron/renderer/index.html')
+          index: resolve(__dirname, 'electron/renderer/index.html'),
+          sidebar: resolve(__dirname, 'electron/renderer/sidebar.html')
         }
       }
     },

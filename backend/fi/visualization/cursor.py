@@ -29,6 +29,27 @@ class PlaywrightBotCursor:
             logger.error(f"Cursor initialization failed: {e}")
             self.is_initialized = False
             return False
+
+    async def ensure_cursor_ready(self, max_retries: int = 3) -> bool:
+        """
+        Ensure the cursor system is ready, with retries.
+        
+        Args:
+            max_retries: Number of times to retry initialization
+            
+        Returns:
+            True if cursor is ready, False otherwise
+        """
+        for attempt in range(max_retries):
+            if await self.initialize():
+                return True
+            await asyncio.sleep(0.1 * (attempt + 1))
+        return False
+
+    async def set_cursor_position(self, x: float, y: float, createTrail: bool = False) -> bool:
+        """Set cursor position directly (alias for set_position)."""
+        await self.set_position(x, y)
+        return True
     
     async def set_position(self, x: float, y: float, suppress_duration: int = 150):
         """Set cursor position with automatic suppression"""

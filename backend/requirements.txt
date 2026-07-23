@@ -1,4 +1,18 @@
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-pydantic>=2.5.0
-
+fastapi==0.116.2
+starlette==0.47.2
+uvicorn[standard]==0.34.0
+pydantic==2.11.7
+httpx==0.28.1
+# Playwright is pinned to match Electron 31's bundled Chromium 126. A much
+# newer Playwright (e.g. 1.57) speaks a newer CDP dialect and connect_over_cdp()
+# hangs 15s on Electron's older protocol. 1.44 (Chromium 125) is just below 126.
+#
+# NOTE (Python 3.13): playwright 1.44 hard-pins an old greenlet with no 3.13
+# wheel, so install it WITHOUT its deps and let the pins below satisfy it:
+#     pip install "playwright==1.44.0" --no-deps
+# (scripts/setup-backend.ps1 does this for you.)
+greenlet>=3.1.1
+pyee>=11.0.0
+playwright-stealth>=1.0.0
+pyyaml>=6.0
+python-dotenv>=1.0.0

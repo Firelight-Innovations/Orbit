@@ -138,7 +138,7 @@ export function ImportChoiceStep({ onImport, onFresh, onBack, isLoading }: Impor
                     Start Fresh
                   </CardTitle>
                   <CardDescription className="text-base text-zinc-400">
-                    Create a new profile with a clean slate
+                    Create a new profile
                   </CardDescription>
                 </div>
                 <div className="flex-1 flex flex-col gap-6">
