@@ -7,6 +7,3 @@ playwright==1.57.0
 playwright-stealth>=1.0.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
-# langchain / langchain-openai: kept only until backend/ai is removed (Phase C)
-langchain>=0.3.0
-langchain-openai>=0.2.0
