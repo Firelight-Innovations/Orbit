@@ -11,13 +11,39 @@ import io
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, Awaitable, Callable, Optional
 
 import httpx
 
 from src.core import registry
+from fi.streaming import StreamEvent
 
 logger = logging.getLogger(__name__)
+
+# Sink the agent pushes progress events into. streaming.py supplies one backed
+# by a queue; None disables emission entirely (the non-streaming callers).
+EventSink = Optional[Callable[[StreamEvent], Awaitable[None]]]
+
+
+def _make_emitter(sink: EventSink):
+    """Wrap an event sink so emission can never break the agent loop.
+
+    Reporting progress is strictly cosmetic. If the consumer has gone away --
+    the user closed the sidebar, the SSE connection dropped -- the turn should
+    still finish and still return its answer.
+    """
+    if sink is None:
+        async def noop(_event: StreamEvent) -> None:
+            return
+        return noop
+
+    async def emit(event: StreamEvent) -> None:
+        try:
+            await sink(event)
+        except Exception as e:
+            logger.debug(f"Dropped {event.type} event: {e}")
+
+    return emit
 
 try:
     from PIL import Image
@@ -287,8 +313,18 @@ async def execute_tool(
     """
     browser = registry.get("browser_instance")
 
-    if browser is None or browser.page is None:
+    if browser is None or browser.context is None:
         return "Error: Not connected to browser."
+
+    # navigate_to is the one tool that works with no page open -- it asks Orbit
+    # to open a real tab. Everything else needs somewhere to act, and must never
+    # fall back to one of Orbit's own views: pointing the agent at the assistant
+    # sidebar made it type into its own chat box and click its own buttons.
+    if browser.page is None and name != "navigate_to":
+        return (
+            "Error: No web page is open -- the user is on a blank tab. "
+            "Use navigate_to to open a site first, then retry."
+        )
 
     page = browser.page
 
@@ -646,23 +682,65 @@ async def _cursor_click_feedback(browser) -> None:
         logger.debug(f"Cursor click feedback skipped: {e}")
 
 
+async def _mouse_click_center(page, element) -> None:
+    """Click the element's centre with a real mouse event."""
+    box = await element.bounding_box()
+    if not box:
+        raise RuntimeError("element has no box (hidden or detached)")
+    await page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+
 async def _click_by_ref(browser, page, ref_id: str) -> str:
-    """Click an element by its ref ID."""
+    """Click an element by its ref ID.
+
+    Tries progressively blunter strategies. A plain Playwright click runs full
+    actionability checks, and result grids routinely cover their own tiles with
+    a hover/preview layer -- the "receives pointer events" check then fails and
+    burns the whole timeout even though a user could click the tile perfectly
+    well. Each fallback drops one of those checks.
+    """
     try:
         element = await page.query_selector(f'[data-agent-ref="{ref_id}"]')
         if not element:
-            return f"Element {ref_id} not found. Take a new snapshot to see current elements."
+            # Refs are stamped onto the DOM at snapshot time, so anything that
+            # re-renders (lazy grids, virtualised lists) drops them. Re-stamp
+            # once and retry before making the model spend a turn on it.
+            await _snapshot_page(browser)
+            element = await page.query_selector(f'[data-agent-ref="{ref_id}"]')
+            if not element:
+                return (
+                    f"Element {ref_id} no longer exists -- the page re-rendered. "
+                    "Take a new snapshot and use the new ref IDs."
+                )
 
         # Scroll into view, walk the cursor over, then click
         await element.scroll_into_view_if_needed()
         await _glide_cursor_to(browser, element)
         await _cursor_click_feedback(browser)
-        await element.click(timeout=5000)
 
-        # Wait a moment for any navigation/updates
-        await page.wait_for_timeout(500)
+        strategies = (
+            ("click", lambda: element.click(timeout=3000)),
+            # Skips the actionability checks, still a real input event.
+            ("force click", lambda: element.click(timeout=3000, force=True)),
+            # Real mouse event at the element's centre -- lands on whatever
+            # overlay sits on top, which is what a user clicking would hit too.
+            ("mouse click", lambda: _mouse_click_center(page, element)),
+            # Last resort: fires the handler directly, bypassing hit-testing
+            # entirely. Won't trigger anything that depends on real input.
+            ("dom click", lambda: element.evaluate("el => el.click()")),
+        )
 
-        return f"Clicked element {ref_id}"
+        errors: list[str] = []
+        for label, attempt in strategies:
+            try:
+                await attempt()
+                await page.wait_for_timeout(500)
+                note = "" if label == "click" else f" (via {label})"
+                return f"Clicked element {ref_id}{note}"
+            except Exception as e:
+                errors.append(f"{label}: {str(e).splitlines()[0]}")
+
+        return f"Failed to click {ref_id}. Tried " + "; ".join(errors)
 
     except Exception as e:
         return f"Failed to click {ref_id}: {str(e)}"
@@ -763,7 +841,9 @@ async def _snapshot_page(browser) -> tuple[str, str | None]:
     """
     page = getattr(browser, "page", None)
     if page is None or page.is_closed():
-        return "Error: no active page.", None
+        # Phrased for the model: this is what it sees as the page state, so it
+        # needs to point at the way out rather than just reporting a fault.
+        return "no_page: true  # no website open yet -- use navigate_to first", None
 
     internal = browser._is_internal_url(page.url)
     want_image = not internal
@@ -870,14 +950,26 @@ class BrowserAgent:
         task: str,
         conversation_id: str | None = None,
         active_url: str | None = None,
+        on_event: "EventSink" = None,
     ) -> str:
-        """Run the agent with browser tools to complete a task."""
+        """Run the agent with browser tools to complete a task.
+
+        `on_event` receives StreamEvents as the turn progresses (tool calls and
+        the model's narration between them) so the UI can show the work live
+        instead of only the final answer. Emission is best-effort: a failing
+        sink is logged and ignored, never allowed to abort the run.
+        """
+        emit = _make_emitter(on_event)
+
         if not self.api_key:
             return "Error: OpenRouter API key not configured."
 
-        # Auto-connect to browser if not connected
+        # Auto-connect to browser if not connected. Keyed on the CDP context,
+        # not on browser.page: having no page is a legitimate state (the user is
+        # on a new tab with nothing loaded), and testing page here would rebuild
+        # the whole connection on every turn until they opened a website.
         browser = registry.get("browser_instance")
-        if browser is None or browser.page is None:
+        if browser is None or browser.context is None:
             logger.info("Browser not connected, attempting auto-connect...")
             try:
                 from fi.browser.instance import BrowserInstance
@@ -966,19 +1058,47 @@ class BrowserAgent:
                     # No tool calls - agent is done
                     final_response = message.get("content", "")
                     break
-                
+
+                # Narration the model wrote alongside its tool calls is its
+                # reasoning for this step, not the answer -- surface it as a
+                # thought so it appears in the timeline rather than being
+                # silently overwritten by the next iteration.
+                if message.get("content"):
+                    await emit(StreamEvent(type="thought", content=message["content"]))
+
                 # Execute each tool call
                 for tool_call in tool_calls:
                     tool_name = tool_call["function"]["name"]
                     tool_args = json.loads(tool_call["function"]["arguments"])
-                    
+                    call_id = tool_call.get("id")
+
                     logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
-                    
+                    await emit(StreamEvent(
+                        type="tool_start",
+                        id=call_id,
+                        tool_name=tool_name,
+                        tool_args=tool_args,
+                    ))
+
                     # Execute the tool
                     sink: dict = {}
                     result = await execute_tool(tool_name, tool_args, sink)
 
                     logger.info(f"Tool result: {result[:200]}...")
+
+                    # execute_tool reports failures as strings rather than
+                    # raising, so the wire status has to be read back off the
+                    # result text.
+                    failed = result.startswith(("Error", "Failed", "Could not"))
+                    await emit(StreamEvent(
+                        type="tool_end",
+                        id=call_id,
+                        tool_name=tool_name,
+                        tool_result=None if failed else result,
+                        status="error" if failed else "ok",
+                        error=result if failed else None,
+                        screenshot=sink.get("image"),
+                    ))
 
                     # Add tool result to messages
                     messages.append({
@@ -1028,7 +1148,13 @@ async def run_with_tools(
     task: str,
     conversation_id: str | None = None,
     active_url: str | None = None,
+    on_event: EventSink = None,
 ) -> str:
     """Run a task with browser tools enabled."""
     agent = get_browser_agent()
-    return await agent.run(task, conversation_id=conversation_id, active_url=active_url)
+    return await agent.run(
+        task,
+        conversation_id=conversation_id,
+        active_url=active_url,
+        on_event=on_event,
+    )
