@@ -77,20 +77,20 @@ export function WelcomeStep({ onGetStarted }: WelcomeStepProps) {
             className="h-24 w-24 object-contain"
           />
           {/* Subtle glow */}
-          <div className="absolute inset-0 -z-10 rounded-full bg-purple-500/20 blur-3xl" />
+          <div className="absolute inset-0 -z-10 rounded-full bg-[var(--accent-primary)]/15 blur-3xl" />
         </motion.div>
       </motion.div>
 
-      {/* Title */}
+      {/* Title. Display type is the serif, as on Simplicity's home screen. */}
       <motion.div variants={itemVariants} className="mb-3">
-        <h1 className="text-5xl font-bold tracking-tight text-white">
+        <h1 className="orbit-serif text-6xl text-white">
           Orbit
         </h1>
       </motion.div>
 
       {/* Subtitle */}
       <motion.p
-        className="mb-16 max-w-lg text-lg leading-relaxed text-zinc-400"
+        className="mb-16 max-w-lg text-lg leading-relaxed text-white/60"
         variants={itemVariants}
       >
         Your intelligent browser companion. Navigate the web with speed, 
@@ -102,7 +102,7 @@ export function WelcomeStep({ onGetStarted }: WelcomeStepProps) {
         <Button
           size="lg"
           onClick={onGetStarted}
-          className="group relative w-full overflow-hidden border-2 border-white/20 bg-transparent px-12 py-8 text-lg font-semibold text-white backdrop-blur-sm transition-all hover:border-purple-500/50 hover:bg-white/5"
+          className="group relative w-full overflow-hidden bg-[var(--accent-primary)] px-12 py-8 text-lg font-medium text-white transition-colors hover:bg-[var(--accent-hover)]"
         >
           <span className="relative z-10 flex items-center justify-center gap-3">
             Get Started
@@ -113,10 +113,10 @@ export function WelcomeStep({ onGetStarted }: WelcomeStepProps) {
 
       {/* Keyboard hint */}
       <motion.p
-        className="mt-8 text-sm text-zinc-600"
+        className="mt-8 text-sm text-white/40"
         variants={itemVariants}
       >
-        Press <kbd className="rounded-md bg-zinc-900/50 border border-zinc-800 px-2 py-1 text-xs text-zinc-400 font-mono">Enter</kbd> to continue
+        Press <kbd className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-2 py-1 font-mono text-xs text-white/60">Enter</kbd> to continue
       </motion.p>
     </motion.div>
   )
