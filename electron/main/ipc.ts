@@ -21,7 +21,6 @@ import {
 } from './index'
 import { getSearchHistoryService } from './services/searchHistory'
 import { getSearchSuggestionsService } from './services/searchSuggestions'
-import { getAISearchService } from './services/aiSearchService'
 import * as profileService from './services/profileService'
 import * as chromeImporter from './services/chromeImporter'
 import { getBookmarksService } from './services/bookmarksService'
@@ -767,24 +766,6 @@ export function setupIpcHandlers(
   ipcMain.handle('profile:resetFirstLaunch', () => {
     profileService.resetFirstLaunch()
     return true
-  })
-
-  // AI Search handler
-  ipcMain.handle('aiSearch:run', async (_event, query: string) => {
-    try {
-      const aiSearchService = await getAISearchService()
-      return await aiSearchService.search(query)
-    } catch (error) {
-      console.error('Error running AI search:', error)
-      return {
-        query,
-        aiOverview: null,
-        results: [],
-        cached: false,
-        timestamp: Date.now(),
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }
-    }
   })
 
   // Assistant chat handler

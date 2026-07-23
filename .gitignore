@@ -15,6 +15,7 @@ dist/
 
 # Electron build output
 out/
+*.tsbuildinfo
 
 # IDE
 .idea/
@@ -49,4 +50,9 @@ htmlcov/
 # Misc
 *.bak
 *.tmp
+
+# Vendored upstream sources, cloned by scripts/sync-simplicity.mjs.
+# Simplicity is pulled fresh from its own repo rather than copied into ours,
+# so nothing from it is ever committed here.
+vendor/
 
