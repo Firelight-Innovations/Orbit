@@ -39,6 +39,33 @@ Do **not** "fix" a failed install by retrying with `yarn --force`. That flag mak
 packages, which forces exactly the `node-gyp` compile described above and turns a transient
 network failure into a hard one.
 
+## Orbit requires Electron 37 because of this
+
+`package.json` pins Electron to `^37`. That is not incidental — search does not work outside a
+narrow window, and both edges are load-bearing.
+
+**The floor is Electron 37.** Simplicity depends on `better-sqlite3@13`, whose prebuilt binary is
+N-API and therefore runtime-agnostic — but only against **N-API version 10** (Node 22+). Orbit was
+on Electron 31, which provides N-API 9. Loading that binary did not fail cleanly: it **segfaulted
+the server** (`0xC0000005`) the instant it opened the database, mid-migration. Upstream's own
+comments claim v13 is "ABI-stable across both Node and Electron", which is true only if you are on
+his Electron 43.
+
+**The ceiling is also Electron 37.** Orbit's *own* `better-sqlite3@12.5.0` is not N-API — it is a
+classic `NODE_MODULE_VERSION` addon, and it publishes Electron prebuilts only up to
+**electron-v136**, which is Electron 37. On Electron 43 (ABI 148) `electron-builder
+install-app-deps` finds no prebuilt, falls back to `node-gyp`, and fails on any machine without a
+C++ toolchain. Bumping Orbit to `better-sqlite3@13` does not help: its own install script is
+`node-gyp rebuild`, which fails the same way.
+
+So Electron 37 (Node 22.21, N-API 10, ABI 136) is the only version satisfying both. To move past
+it, migrate Orbit's SQLite usage to Node 24's built-in `node:sqlite` and drop the native dependency
+entirely — then any Electron works.
+
+> If an Electron upgrade is interrupted partway, `@electron/rebuild` may have already deleted
+> `node_modules/better-sqlite3/build/Release/better_sqlite3.node`. `npm rebuild better-sqlite3`
+> restores it.
+
 ## Runtime shape
 
 Two child processes, both on loopback ports, both owned by Orbit's main process

@@ -694,6 +694,18 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
   mainWindow.contentView.addChildView(searchView)
   searchView.setVisible(false)
 
+  // Give it a real document immediately, for the same reason the root window
+  // gets one above: a page target with no document never answers
+  // Page.enable/Runtime.enable, and Playwright's connect_over_cdp()
+  // auto-attaches to every target and blocks on it — which hangs the AI
+  // agent's browser connection. A view that sat empty until first use would
+  // reintroduce exactly the bug that workaround exists to prevent. Dark, to
+  // match the window background and avoid a white flash on first show.
+  searchView.webContents.loadURL(
+    'data:text/html,' +
+      encodeURIComponent('<!doctype html><meta charset="utf-8"><body style="margin:0;background:#0f0f0f"></body>')
+  )
+
   // Links out of search open as real Orbit tabs rather than popup windows.
   searchView.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) {

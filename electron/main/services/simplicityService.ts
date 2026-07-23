@@ -291,9 +291,19 @@ export class SimplicityService {
     env.OPENAI_BASE_URL = OPENROUTER_BASE_URL
 
     /* Electron ships no separate node binary, so re-exec ourselves as Node.
-       Safe for Simplicity's native deps because better-sqlite3 13 is N-API
-       based and therefore ABI-stable across Node and Electron. Electron 31
-       carries Node 20.18, above Next 16's >=20.9 floor. */
+     *
+     * This requires Electron >= 37 and package.json pins it there. Simplicity
+     * depends on better-sqlite3 13, whose prebuilt binary is N-API — runtime
+     * agnostic, but only against **N-API version 10** (Node 22+). Electron 31
+     * provided N-API 9, and loading that binary segfaulted the server the
+     * moment it opened the database (0xC0000005, mid-migration) rather than
+     * failing to load with a readable error. Electron 37 carries Node 22.21 /
+     * N-API 10, which also clears Next 16's >=20.9 floor.
+     *
+     * 37 specifically, not later: it is the highest Electron ABI (136) for
+     * which better-sqlite3 12 — the copy *Orbit itself* uses — publishes a
+     * prebuilt. Going further makes Orbit's own install need a C++ toolchain.
+     * See docs/search.md. */
     this.serverProcess = spawn(process.execPath, [join(this.standaloneDir, 'server.js')], {
       cwd: this.standaloneDir,
       env: {
@@ -306,6 +316,8 @@ export class SimplicityService {
       },
     })
 
+    console.log(`[Simplicity] starting server on ${url}`)
+
     this.serverProcess.stdout?.on('data', (d: Buffer) => console.log(`[Simplicity] ${d.toString().trim()}`))
     this.serverProcess.stderr?.on('data', (d: Buffer) => console.error(`[Simplicity] ${d.toString().trim()}`))
     this.serverProcess.on('exit', (code) => {
@@ -314,9 +326,19 @@ export class SimplicityService {
       this.port = null
     })
 
-    const deadline = Date.now() + 60_000
+    /* Generous, because "bound" and "answering" are far apart on a first run.
+       Next binds the port and prints "Ready" immediately, then Drizzle runs
+       its migrations through better-sqlite3 — whose API is synchronous, so the
+       event loop is blocked and nothing is served until they finish. On a cold
+       machine also busy starting Electron, Vite and the Python backend, that
+       overran a 60s budget by seconds and the whole start was abandoned even
+       though the server came up fine moments later. */
+    const deadline = Date.now() + 180_000
     while (Date.now() < deadline) {
-      if (this.stopped) throw new Error('Simplicity was shut down during startup.')
+      if (this.stopped) {
+        this.killServerProcess()
+        throw new Error('Simplicity was shut down during startup.')
+      }
       if (await isServing(url)) {
         this.port = port
         console.log(`[Simplicity] ready at ${url}`)
@@ -325,7 +347,31 @@ export class SimplicityService {
       await delay(400)
     }
 
-    throw new Error("Simplicity's server started but isn't responding.")
+    /* Give up on a child that is still running: it holds its port, and every
+       later attempt picks a new one, so without this each failed start leaks
+       another server process for the rest of the session. */
+    this.killServerProcess()
+    throw new Error(`Simplicity's server started but isn't responding at ${url}.`)
+  }
+
+  /* Terminate the spawned server. The standalone server starts its own
+     workers, and on Windows only a tree kill reliably takes them with it —
+     otherwise the port stays held by an orphan. */
+  private killServerProcess(): void {
+    const proc = this.serverProcess
+    this.serverProcess = null
+    this.port = null
+    if (!proc?.pid) return
+
+    try {
+      if (process.platform === 'win32') {
+        spawn('taskkill', ['/pid', String(proc.pid), '/f', '/t'])
+      } else {
+        proc.kill('SIGTERM')
+      }
+    } catch {
+      /* already gone */
+    }
   }
 
   async stop(): Promise<void> {
