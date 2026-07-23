@@ -98,8 +98,11 @@
     --secondary-foreground: 213 31% 91%;
     --muted: 215 15% 15%;          /* #21262d */
     --muted-foreground: 213 12% 62%;
-    --accent: 203 85% 54%;         /* #24a0ed */
-    --accent-foreground: 0 0% 100%;
+    /* ShadCN's --accent is the *hover surface*, not the brand hue. It was
+       previously pinned to the brand colour, which made every ghost/outline
+       button flood solid on hover; dark-200 is what Simplicity fills with. */
+    --accent: 215 15% 15%;         /* #21262d */
+    --accent-foreground: 213 31% 91%;
     --destructive: 3 92% 63%;      /* #f85149 */
     --destructive-foreground: 0 0% 100%;
     --border: 215 15% 15%;         /* #21262d */

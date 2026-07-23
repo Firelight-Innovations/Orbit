@@ -187,8 +187,8 @@ function App() {
   if (showWelcome === null) {
     return (
       <div className="app">
-        <div className="flex h-full items-center justify-center bg-[#0a0a0b]">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
+        <div className="flex h-full items-center justify-center bg-[var(--surface-base)]">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--surface-strong)] border-t-[var(--accent-primary)]" />
         </div>
       </div>
     )

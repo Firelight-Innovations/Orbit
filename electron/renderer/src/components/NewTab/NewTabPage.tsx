@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { BookmarkNode } from '@/../../preload/index'
 import { Plus } from 'lucide-react'
 import orbitLogo from '../../assets/orbit_logo.png'
@@ -84,7 +84,9 @@ export function NewTabPage({ onNavigate }: NewTabPageProps) {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full w-full bg-gradient-to-br from-[#0a0a0b] via-[#0f0a14] to-[#0a0a0b]">
+    // Simplicity's home screen is a single centred column on a flat base tone;
+    // no gradient wash behind it.
+    <div className="flex h-full w-full flex-col items-center justify-center bg-[var(--surface-base)]">
       {/* Search Bar */}
       <div className="w-full max-w-2xl px-8 mb-12">
         <form onSubmit={handleSubmit}>
@@ -133,9 +135,9 @@ export function NewTabPage({ onNavigate }: NewTabPageProps) {
               <button
                 key={shortcut.id}
                 onClick={() => handleShortcutClick(shortcut.url!)}
-                className="flex flex-col items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
+                className="group flex flex-col items-center gap-3 rounded-xl p-4 transition-colors hover:bg-[var(--surface-raised)]"
               >
-                <div className="w-16 h-16 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/20 transition-colors">
+                <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-raised)] transition-colors group-hover:border-[var(--border-default)]">
                   <img
                     src={getFaviconUrl(shortcut.url!)}
                     alt={shortcut.name}
@@ -145,7 +147,7 @@ export function NewTabPage({ onNavigate }: NewTabPageProps) {
                     }}
                   />
                 </div>
-                <span className="text-sm text-white/90 text-center">
+                <span className="text-center text-sm text-white/60 transition-colors group-hover:text-white/90">
                   {getShortName(shortcut.name)}
                 </span>
               </button>
@@ -154,12 +156,12 @@ export function NewTabPage({ onNavigate }: NewTabPageProps) {
             {/* Add Shortcut Button */}
             <button
               onClick={() => onNavigate('orbit://bookmarks')}
-              className="flex flex-col items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
+              className="group flex flex-col items-center gap-3 rounded-xl p-4 transition-colors hover:bg-[var(--surface-raised)]"
             >
-              <div className="w-16 h-16 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center group-hover:bg-white/20 transition-colors">
-                <Plus className="w-8 h-8 text-white/60" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-[var(--border-subtle)] transition-colors group-hover:border-[var(--border-default)]">
+                <Plus className="h-8 w-8 text-white/40" />
               </div>
-              <span className="text-sm text-white/70 text-center">
+              <span className="text-center text-sm text-white/40 transition-colors group-hover:text-white/60">
                 Add shortcut
               </span>
             </button>
@@ -168,11 +170,11 @@ export function NewTabPage({ onNavigate }: NewTabPageProps) {
       )}
 
       {shortcuts.length === 0 && (
-        <div className="text-center text-white/50">
+        <div className="text-center text-white/40">
           <p className="mb-4">No bookmarks yet</p>
           <button
             onClick={() => onNavigate('orbit://bookmarks')}
-            className="px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors"
+            className="rounded-full bg-[var(--accent-primary)] px-6 py-3 text-white transition-colors hover:bg-[var(--accent-hover)]"
           >
             Manage Bookmarks
           </button>
