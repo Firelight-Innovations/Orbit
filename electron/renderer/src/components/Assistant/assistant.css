@@ -20,6 +20,53 @@
   --oa-research: #14b8a6;
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ * Composer focus ring
+ * ---------------------------------------------------------------------------
+ *
+ * The whole composer card is one focus target: putting the caret in the
+ * textarea rings the container that also holds the mode picker and the send
+ * button, rather than boxing the textarea on its own.
+ *
+ * WHY THIS IS CSS AND NOT A TAILWIND UTILITY. styles/global.css declares
+ *
+ *     :focus-visible { outline: 2px solid var(--accent-primary); ... }
+ *
+ * OUTSIDE any `@layer`. This project is on Tailwind v4, where every utility
+ * lives inside `@layer utilities` — and in the CSS cascade an unlayered rule
+ * beats *any* layered rule regardless of specificity. That is why the
+ * textarea's `focus-visible:outline-none` utility was losing and the purple
+ * chrome ring was showing through. These rules are likewise unlayered AND more
+ * specific, so they win on both counts. The global rule stays untouched; it is
+ * still the focus affordance everywhere else in the browser UI.
+ */
+
+/* The textarea never draws its own ring — the card carries it. */
+.orbit-assistant .orbit-composer-input,
+.orbit-assistant .orbit-composer-input:focus,
+.orbit-assistant .orbit-composer-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Focus anywhere inside the card lights up the card. */
+.orbit-assistant .orbit-composer:focus-within {
+  border-color: var(--oa-accent);
+  outline: 2px solid var(--oa-accent);
+  outline-offset: 2px;
+}
+
+/*
+ * Keyboard focus on the composer's own controls stays visible — it just uses
+ * the assistant's accent instead of the browser chrome's purple, and hugs the
+ * control so it reads as nested inside the card ring rather than fighting it.
+ */
+.orbit-assistant .orbit-composer button:focus-visible {
+  outline: 1px solid var(--oa-accent);
+  outline-offset: 1px;
+}
+
 /* Simplicity's serif/sans split: sans everywhere, serif for display headings only. */
 .orbit-serif {
   font-family: 'Instrument Serif', Georgia, 'Times New Roman', serif;

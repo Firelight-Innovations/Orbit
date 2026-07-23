@@ -1,18 +1,29 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { X, Trash2 } from 'lucide-react'
+import { X, History, SquarePen } from 'lucide-react'
 import { assistantStore, useAssistantStore, AssistantMode, AssistantTab } from '@/stores/assistantStore'
 import { cn } from '@/lib/utils'
 import { applyAssistantEvent, AssistantStreamEvent } from './agentEvents'
 import { ChatTurn } from './ChatTurn'
 import { Composer } from './Composer'
-import { MODES } from './modes'
+import { ConversationHistory } from './ConversationHistory'
+import { ModeSuggestion } from './ModeSuggestion'
+import { modeConfig } from './modes'
+import { looksLikeTask } from './taskIntent'
+import {
+  StoredConversation,
+  loadConversations,
+  saveConversation,
+  deleteConversation,
+  loadMode,
+  saveMode
+} from './conversationStorage'
 import './assistant.css'
 
 /**
  * Assistant sidebar — a Perplexity-style answer surface modelled on Simplicity.
  *
  * Layout, top to bottom:
- *   header (chat/workflows tabs, clear, close)
+ *   header (chat/workflows tabs, history, new chat, close)
  *   transcript — full-width turns, no bubbles: question as a serif heading,
  *     then the agent's step timeline, its sources, then the answer
  *   composer — pinned, with the mode picker and send/stop
@@ -22,7 +33,18 @@ import './assistant.css'
  * the backend sends only `chunk`/`done` — which is all it sends today — no
  * steps or sources exist, those blocks render nothing, and the turn degrades to
  * a plain streaming answer.
+ *
+ * History lives entirely in this renderer's localStorage (conversationHistory.ts).
+ * The `conversationId` is carried through unchanged when a chat is restored,
+ * because the backend keys its own server-side history on that same value.
  */
+
+/**
+ * How long the transcript has to stop changing before it's written to storage.
+ * Streaming fires a store update per chunk; without this we'd serialise the
+ * whole conversation dozens of times a second.
+ */
+const PERSIST_DEBOUNCE_MS = 700
 
 interface AssistantSidebarProps {
   activeUrl?: string | null
@@ -43,24 +65,76 @@ export function AssistantSidebar({
   const scrollRef = useRef<HTMLDivElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
+  // --- previous chats ------------------------------------------------------
+  const [conversations, setConversations] = useState<StoredConversation[]>(() =>
+    loadConversations()
+  )
+  const [showHistory, setShowHistory] = useState(false)
+  const persistTimerRef = useRef<number | null>(null)
+  // Set for one tick when a conversation is restored, so re-hydrating the panel
+  // doesn't immediately re-save it and bump it to the top of the list.
+  const skipPersistRef = useRef(false)
+
+  // --- ask -> agent nudge --------------------------------------------------
+  // The message held back while the user answers the "this looks like a task"
+  // prompt. `null` means nothing is pending.
+  const [pendingTask, setPendingTask] = useState<string | null>(null)
+  // Messages the user has already declined to escalate. Denying once is enough;
+  // retyping the same thing shouldn't re-open the prompt.
+  const declinedRef = useRef<Set<string>>(new Set())
+
   // Keep the store's copy of page context in step with the props pushed over IPC.
   useEffect(() => {
     assistantStore.setPageContext({ url: activeUrl ?? null, selectedText: selectedText ?? null })
   }, [activeUrl, selectedText])
 
+  // Restore the last-used mode. Read through `normalizeMode`, so a `plan` value
+  // written by a build that still had that mode comes back as `ask`.
+  useEffect(() => {
+    assistantStore.setMode(loadMode())
+  }, [])
+
+  useEffect(() => {
+    saveMode(mode)
+  }, [mode])
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') assistantStore.close()
+      if (event.key !== 'Escape') return
+      // Escape peels one layer at a time rather than jumping straight to close.
+      if (showHistory) setShowHistory(false)
+      else assistantStore.close()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [])
+  }, [showHistory])
 
   useEffect(() => {
     return () => {
       cleanupRef.current?.()
+      if (persistTimerRef.current !== null) window.clearTimeout(persistTimerRef.current)
     }
   }, [])
+
+  // Persist the live conversation. Debounced because `messages` changes on every
+  // streamed chunk; the trailing write lands once the turn goes quiet.
+  useEffect(() => {
+    if (!messages.length) return
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false
+      return
+    }
+
+    if (persistTimerRef.current !== null) window.clearTimeout(persistTimerRef.current)
+    persistTimerRef.current = window.setTimeout(() => {
+      persistTimerRef.current = null
+      setConversations(saveConversation(conversationId, messages))
+    }, PERSIST_DEBOUNCE_MS)
+
+    return () => {
+      if (persistTimerRef.current !== null) window.clearTimeout(persistTimerRef.current)
+    }
+  }, [messages, conversationId])
 
   // Stick to the bottom, but only while the user is already near it — scrolling
   // up to read a source shouldn't get yanked back down by the next chunk.
@@ -77,7 +151,7 @@ export function AssistantSidebar({
   // Fallback for when the streaming bridge can't be established at all. Keeps
   // the non-streaming `assistant.sendMessage` IPC path alive and reachable.
   const handleSendBuffered = useCallback(
-    async (message: string, assistantMessageId: string) => {
+    async (message: string, assistantMessageId: string, sendMode: AssistantMode) => {
       try {
         const response = await window.electronAPI.assistant.sendMessage(
           message,
@@ -85,7 +159,7 @@ export function AssistantSidebar({
             url: pageContext?.url ?? activeUrl ?? null,
             selectedText: pageContext?.selectedText ?? selectedText ?? null
           },
-          mode,
+          sendMode,
           conversationId
         )
 
@@ -106,11 +180,11 @@ export function AssistantSidebar({
         assistantStore.setSending(false)
       }
     },
-    [activeUrl, selectedText, pageContext, mode, conversationId]
+    [activeUrl, selectedText, pageContext, conversationId]
   )
 
   const handleSendStreaming = useCallback(
-    (message: string, assistantMessageId: string) => {
+    (message: string, assistantMessageId: string, sendMode: AssistantMode) => {
       const contextToSend = {
         url: pageContext?.url ?? activeUrl ?? null,
         selectedText: pageContext?.selectedText ?? selectedText ?? null
@@ -119,7 +193,7 @@ export function AssistantSidebar({
       const cleanup = window.electronAPI.assistant.sendMessageStream(
         message,
         contextToSend,
-        mode,
+        sendMode,
         conversationId,
         {
           onEvent: (event) => {
@@ -146,39 +220,88 @@ export function AssistantSidebar({
       cleanupRef.current = cleanup
       return true
     },
-    [activeUrl, selectedText, pageContext, mode, conversationId]
+    [activeUrl, selectedText, pageContext, conversationId]
+  )
+
+  /**
+   * Commit a message to the transcript and start the turn.
+   *
+   * `sendMode` is passed explicitly rather than read from the store: accepting
+   * the agent-mode nudge switches the mode and sends in the same tick, and the
+   * `mode` this component closed over is still the old value at that point.
+   */
+  const dispatchSend = useCallback(
+    (message: string, sendMode: AssistantMode) => {
+      assistantStore.addMessage({
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: message,
+        mode: sendMode
+      })
+
+      const assistantMessageId = `assistant-${Date.now()}`
+      assistantStore.addMessage({
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        pending: true,
+        streaming: true,
+        mode: sendMode
+      })
+
+      setInput('')
+      assistantStore.setSending(true)
+
+      try {
+        handleSendStreaming(message, assistantMessageId, sendMode)
+      } catch {
+        void handleSendBuffered(message, assistantMessageId, sendMode)
+      }
+    },
+    [handleSendStreaming, handleSendBuffered]
   )
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim()
     if (!trimmed || isSending) return
 
-    assistantStore.addMessage({
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: trimmed,
-      mode
-    })
-
-    const assistantMessageId = `assistant-${Date.now()}`
-    assistantStore.addMessage({
-      id: assistantMessageId,
-      role: 'assistant',
-      content: '',
-      pending: true,
-      streaming: true,
-      mode
-    })
-
-    setInput('')
-    assistantStore.setSending(true)
-
-    try {
-      handleSendStreaming(trimmed, assistantMessageId)
-    } catch {
-      void handleSendBuffered(trimmed, assistantMessageId)
+    // Only ask mode gets the nudge, and only once per distinct message.
+    if (mode === 'ask' && !declinedRef.current.has(trimmed) && looksLikeTask(trimmed)) {
+      setPendingTask(trimmed)
+      return
     }
-  }, [input, isSending, mode, handleSendStreaming, handleSendBuffered])
+
+    dispatchSend(trimmed, mode)
+  }, [input, isSending, mode, dispatchSend])
+
+  /** Nudge accepted: switch the composer to agent mode and send there. */
+  const handleAcceptAgentMode = useCallback(() => {
+    if (!pendingTask) return
+    assistantStore.setMode('agent')
+    dispatchSend(pendingTask, 'agent')
+    setPendingTask(null)
+  }, [pendingTask, dispatchSend])
+
+  /**
+   * Editing the composer while the nudge is up invalidates it — the prompt was
+   * about the old text, so silently dismiss rather than send something the user
+   * has moved on from.
+   */
+  const handleInputChange = useCallback(
+    (next: string) => {
+      setInput(next)
+      if (pendingTask && next.trim() !== pendingTask) setPendingTask(null)
+    },
+    [pendingTask]
+  )
+
+  /** Nudge declined: send unchanged, and remember not to ask about this again. */
+  const handleDenyAgentMode = useCallback(() => {
+    if (!pendingTask) return
+    declinedRef.current.add(pendingTask)
+    dispatchSend(pendingTask, 'ask')
+    setPendingTask(null)
+  }, [pendingTask, dispatchSend])
 
   const handleStop = useCallback(() => {
     cleanupRef.current?.()
@@ -194,7 +317,80 @@ export function AssistantSidebar({
     })
   }, [])
 
-  const activeMode = MODES[mode]
+  // --- previous chats: new / open / delete ---------------------------------
+
+  /**
+   * Write the live conversation now, cancelling any debounced write.
+   *
+   * Called before anything that swaps the transcript out, so a chat can't be
+   * lost inside the debounce window. Reads straight from the store rather than
+   * from props so it never works off a stale closure.
+   */
+  const flushPersist = useCallback(() => {
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current)
+      persistTimerRef.current = null
+    }
+    const live = assistantStore.getState()
+    setConversations(
+      live.messages.length
+        ? saveConversation(live.conversationId, live.messages)
+        : loadConversations()
+    )
+  }, [])
+
+  // Opening the sheet flushes first, so the chat you're currently in is already
+  // in the list and up to date when it appears.
+  useEffect(() => {
+    if (showHistory) flushPersist()
+  }, [showHistory, flushPersist])
+
+  /**
+   * Start a fresh thread. The outgoing conversation has already been written to
+   * storage by the persist effect, so nothing is lost — `clearMessages` just
+   * mints a new `conversationId`, which starts a new bucket on the backend too.
+   */
+  const handleNewChat = useCallback(() => {
+    cleanupRef.current?.()
+    cleanupRef.current = null
+    assistantStore.setSending(false)
+    flushPersist()
+    assistantStore.clearMessages()
+    setPendingTask(null)
+    setShowHistory(false)
+    setInput('')
+  }, [flushPersist])
+
+  const handleSelectConversation = useCallback(
+    (conversation: StoredConversation) => {
+      // Abandon anything still streaming into the thread we're leaving, and get
+      // it written out before it's replaced.
+      cleanupRef.current?.()
+      cleanupRef.current = null
+      flushPersist()
+      // The restore itself must not be treated as an edit worth re-saving.
+      skipPersistRef.current = true
+      assistantStore.loadConversation(conversation.id, conversation.messages)
+      setPendingTask(null)
+      setShowHistory(false)
+    },
+    [flushPersist]
+  )
+
+  const handleDeleteConversation = useCallback(
+    (id: string) => {
+      setConversations(deleteConversation(id))
+      // Deleting the chat you're looking at empties the panel rather than
+      // leaving an orphaned transcript that would just be re-saved.
+      if (id === conversationId) {
+        assistantStore.clearMessages()
+        setPendingTask(null)
+      }
+    },
+    [conversationId]
+  )
+
+  const activeMode = modeConfig(mode)
   const EmptyIcon = activeMode.icon
 
   const TabButton = ({ tab, label }: { tab: AssistantTab; label: string }): JSX.Element => (
@@ -225,14 +421,25 @@ export function AssistantSidebar({
         </nav>
 
         <div className="flex items-center gap-1 pb-2">
+          <button
+            type="button"
+            onClick={() => setShowHistory((open) => !open)}
+            title="Previous chats"
+            className={cn(
+              'rounded-md p-1.5 transition-colors duration-150 hover:bg-[#21262d] hover:text-white/80',
+              showHistory ? 'bg-[#21262d] text-white/80' : 'text-white/35'
+            )}
+          >
+            <History size={14} />
+          </button>
           {messages.length > 0 && (
             <button
               type="button"
-              onClick={() => assistantStore.clearMessages()}
+              onClick={handleNewChat}
               title="New chat"
               className="rounded-md p-1.5 text-white/35 transition-colors duration-150 hover:bg-[#21262d] hover:text-white/80"
             >
-              <Trash2 size={14} />
+              <SquarePen size={14} />
             </button>
           )}
           <button
@@ -247,7 +454,9 @@ export function AssistantSidebar({
       </header>
 
       {activeTab === 'chat' ? (
-        <>
+        // `relative` anchors the history sheet, which overlays the transcript
+        // and the composer without unmounting either.
+        <div className="relative flex min-h-0 flex-1 flex-col">
           <div ref={scrollRef} className="orbit-scroll relative flex-1 overflow-y-auto px-4 py-5">
             {messages.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center px-4 text-center">
@@ -273,9 +482,17 @@ export function AssistantSidebar({
             <div ref={endRef} />
           </div>
 
+          {pendingTask && (
+            <ModeSuggestion
+              message={pendingTask}
+              onAccept={handleAcceptAgentMode}
+              onDeny={handleDenyAgentMode}
+            />
+          )}
+
           <Composer
             value={input}
-            onChange={setInput}
+            onChange={handleInputChange}
             onSubmit={handleSend}
             onStop={handleStop}
             isSending={isSending}
@@ -284,7 +501,18 @@ export function AssistantSidebar({
             pageUrl={pageContext?.url ?? activeUrl}
             selectedText={pageContext?.selectedText ?? selectedText}
           />
-        </>
+
+          {showHistory && (
+            <ConversationHistory
+              conversations={conversations}
+              activeId={conversationId}
+              onSelect={handleSelectConversation}
+              onDelete={handleDeleteConversation}
+              onNewChat={handleNewChat}
+              onClose={() => setShowHistory(false)}
+            />
+          )}
+        </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
           <h2 className="orbit-serif text-[24px] tracking-tight text-white/60">Workflows</h2>

@@ -3,7 +3,7 @@ import { ArrowUp, ChevronDown, Square, Globe, TextQuote } from 'lucide-react'
 import { AssistantMode } from '@/stores/assistantStore'
 import { cn } from '@/lib/utils'
 import { domainOf } from './sourceUtils'
-import { MODES, MODE_ORDER } from './modes'
+import { MODES, MODE_ORDER, modeConfig } from './modes'
 
 /**
  * Message composer.
@@ -59,7 +59,7 @@ export function Composer({
     return () => document.removeEventListener('mousedown', handler)
   }, [showModePicker])
 
-  const activeMode = MODES[mode]
+  const activeMode = modeConfig(mode)
   const ActiveIcon = activeMode.icon
   const hasContext = Boolean(pageUrl || selectedText)
 
@@ -93,7 +93,10 @@ export function Composer({
           </div>
         )}
 
-        <div className="rounded-2xl border border-[#21262d] bg-[#161b22] p-3 shadow-sm shadow-black/20 transition-colors duration-200 focus-within:border-[#30363d]">
+        {/* `orbit-composer` is the focus target for the whole card — see the
+            focus block in assistant.css for why this can't be a Tailwind
+            utility. */}
+        <div className="orbit-composer rounded-2xl border border-[#21262d] bg-[#161b22] p-3 shadow-sm shadow-black/20 transition-colors duration-200">
           <textarea
             ref={textareaRef}
             value={value}
@@ -106,7 +109,7 @@ export function Composer({
               }
             }}
             placeholder={activeMode.placeholder}
-            className="orbit-scroll max-h-[180px] w-full resize-none bg-transparent px-1 text-[13px] leading-relaxed text-white placeholder-white/30 outline-none focus:outline-none focus-visible:outline-none"
+            className="orbit-composer-input orbit-scroll max-h-[180px] w-full resize-none bg-transparent px-1 text-[13px] leading-relaxed text-white placeholder-white/30"
           />
 
           <div className="mt-2 flex items-center justify-between gap-2">
