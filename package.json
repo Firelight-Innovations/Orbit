@@ -4,6 +4,7 @@
   "description": "Electron app with Python backend, custom title bar, and Chrome-like tabs",
   "main": "./out/main/index.js",
   "scripts": {
+    "predev": "node scripts/free-port.js",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
