@@ -37,7 +37,7 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState<OrbitProfile | null>(null)
   const [newProfileName, setNewProfileName] = useState('')
-  const [selectedColor, setSelectedColor] = useState('#8b5cf6')
+  const [selectedColor, setSelectedColor] = useState('#24a0ed')
   const [isCreating, setIsCreating] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [selectedChromeProfile, setSelectedChromeProfile] = useState<ChromeProfileInfo | null>(null)
@@ -165,14 +165,14 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#0a0a0b]">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+      <div className="flex h-full items-center justify-center bg-[var(--surface-base)]">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent-primary)]" />
       </div>
     )
   }
 
   return (
-    <div className="h-full overflow-auto bg-[#0a0a0b] p-8">
+    <div className="h-full overflow-auto bg-[var(--surface-base)] p-8">
       <motion.div
         className="mx-auto max-w-4xl"
         variants={containerVariants}
@@ -181,8 +181,8 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
       >
         {/* Header */}
         <motion.div variants={itemVariants} className="mb-8">
-          <h1 className="mb-2 text-3xl font-bold text-white">Profiles</h1>
-          <p className="text-zinc-400">
+          <h1 className="orbit-serif mb-2 text-4xl text-white">Profiles</h1>
+          <p className="text-white/60">
             Manage your Orbit profiles and import data from Chrome
           </p>
         </motion.div>
@@ -191,7 +191,7 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
         <motion.div variants={itemVariants} className="mb-8 flex flex-wrap gap-4">
           <Button 
             onClick={() => setShowCreateDialog(true)}
-            className="bg-purple-600 hover:bg-purple-500"
+            className="bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)]"
           >
             <Plus className="mr-2 h-4 w-4" />
             Create Profile
@@ -200,7 +200,7 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
             <Button 
               variant="outline" 
               onClick={() => setShowImportDialog(true)}
-              className="border-zinc-700 text-white hover:bg-zinc-800"
+              className="border-[var(--border-default)] text-white hover:bg-[var(--surface-subtle)]"
             >
               <Import className="mr-2 h-4 w-4" />
               Import from Chrome
@@ -212,16 +212,16 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
         {profiles.length === 0 ? (
           <motion.div
             variants={itemVariants}
-            className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 py-16"
+            className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border-subtle)] py-16"
           >
-            <User className="mb-4 h-12 w-12 text-zinc-600" />
-            <h3 className="mb-2 text-lg font-medium text-zinc-400">No profiles yet</h3>
-            <p className="mb-4 text-sm text-zinc-500">
+            <User className="mb-4 h-12 w-12 text-white/25" />
+            <h3 className="mb-2 text-lg font-medium text-white/60">No profiles yet</h3>
+            <p className="mb-4 text-sm text-white/40">
               Create your first profile to get started
             </p>
             <Button 
               onClick={() => setShowCreateDialog(true)}
-              className="bg-purple-600 hover:bg-purple-500"
+              className="bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)]"
             >
               <Plus className="mr-2 h-4 w-4" />
               Create Profile
@@ -241,8 +241,8 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
                   exit={{ opacity: 0, scale: 0.8 }}
                 >
                   <Card 
-                    className={`group cursor-pointer border-zinc-800 bg-zinc-900/50 transition-all hover:border-purple-500/50 hover:bg-zinc-900 ${
-                      profile.id === activeProfileId ? 'ring-2 ring-purple-500' : ''
+                    className={`group cursor-pointer border-[var(--border-subtle)] bg-[var(--surface-raised)] transition-colors hover:border-[var(--border-default)] ${
+                      profile.id === activeProfileId ? 'ring-2 ring-[var(--accent-primary)]' : ''
                     }`}
                     onClick={() => handleSwitchProfile(profile.id)}
                   >
@@ -263,13 +263,13 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
                           </AvatarFallback>
                         </Avatar>
                         {profile.id === activeProfileId && (
-                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-500">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent-primary)]">
                             <Check className="h-4 w-4 text-white" />
                           </div>
                         )}
                       </div>
                       <CardTitle className="text-lg text-white">{profile.name}</CardTitle>
-                      <CardDescription className="text-zinc-500">
+                      <CardDescription className="text-white/40">
                         {profile.isImported ? (
                           <span className="flex items-center gap-1">
                             <Chrome className="h-3 w-3" />
@@ -285,7 +285,7 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 text-zinc-400 hover:text-white"
+                          className="h-8 text-white/60 hover:text-white"
                           onClick={(e) => {
                             e.stopPropagation()
                             // TODO: Implement edit
@@ -298,7 +298,7 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                            className="h-8 text-[var(--error)] hover:bg-[var(--error-soft)] hover:text-[var(--error)]"
                             onClick={(e) => {
                               e.stopPropagation()
                               setShowDeleteDialog(profile)
@@ -320,16 +320,16 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
 
       {/* Create Profile Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="border-zinc-800 bg-zinc-900">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-white">Create New Profile</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-white/60">
               Create a fresh profile with its own bookmarks, history, and settings.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="mb-2 block text-sm font-medium text-zinc-300">
+              <label className="mb-2 block text-sm font-medium text-white/70">
                 Profile Name
               </label>
               <input
@@ -337,11 +337,11 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
                 placeholder="Enter a name..."
-                className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] px-3 py-2 text-white placeholder-white/30 transition-colors focus:border-[var(--accent-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)]"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-zinc-300">
+              <label className="mb-2 block text-sm font-medium text-white/70">
                 Profile Color
               </label>
               <div className="flex flex-wrap gap-2">
@@ -350,7 +350,7 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
                     key={color}
                     onClick={() => setSelectedColor(color)}
                     className={`h-8 w-8 rounded-full transition-all ${
-                      selectedColor === color ? 'ring-2 ring-white ring-offset-2 ring-offset-zinc-900' : ''
+                      selectedColor === color ? 'ring-2 ring-white ring-offset-2 ring-offset-[var(--surface-raised)]' : ''
                     }`}
                     style={{ backgroundColor: color }}
                   />
@@ -362,14 +362,14 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
             <Button
               variant="ghost"
               onClick={() => setShowCreateDialog(false)}
-              className="text-zinc-400 hover:text-white"
+              className="text-white/60 hover:text-white"
             >
               Cancel
             </Button>
             <Button
               onClick={handleCreateProfile}
               disabled={!newProfileName.trim() || isCreating}
-              className="bg-purple-600 hover:bg-purple-500"
+              className="bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)]"
             >
               {isCreating ? (
                 <>
@@ -386,10 +386,10 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
 
       {/* Import Profile Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="border-zinc-800 bg-zinc-900">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-white">Import from Chrome</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-white/60">
               Select a Chrome profile to import into Orbit.
             </DialogDescription>
           </DialogHeader>
@@ -400,24 +400,24 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
                 onClick={() => setSelectedChromeProfile(profile)}
                 className={`flex cursor-pointer items-center gap-3 rounded-lg p-3 transition-colors ${
                   selectedChromeProfile?.path === profile.path
-                    ? 'bg-purple-500/20 ring-1 ring-purple-500'
-                    : 'hover:bg-zinc-800'
+                    ? 'bg-[var(--accent-soft)] ring-1 ring-[var(--accent-primary)]'
+                    : 'hover:bg-[var(--surface-subtle)]'
                 }`}
               >
                 <Avatar className="h-10 w-10">
                   <AvatarImage src={profile.avatar} alt={profile.name} />
-                  <AvatarFallback className="bg-zinc-700 text-white">
+                  <AvatarFallback className="bg-[var(--surface-strong)] text-white">
                     {getInitials(profile.name)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
                   <p className="font-medium text-white">{profile.name}</p>
                   {profile.email && (
-                    <p className="text-sm text-zinc-500">{profile.email}</p>
+                    <p className="text-sm text-white/40">{profile.email}</p>
                   )}
                 </div>
                 {selectedChromeProfile?.path === profile.path && (
-                  <Check className="h-5 w-5 text-purple-400" />
+                  <Check className="h-5 w-5 text-[var(--accent-primary)]" />
                 )}
               </div>
             ))}
@@ -426,14 +426,14 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
             <Button
               variant="ghost"
               onClick={() => setShowImportDialog(false)}
-              className="text-zinc-400 hover:text-white"
+              className="text-white/60 hover:text-white"
             >
               Cancel
             </Button>
             <Button
               onClick={handleImportProfile}
               disabled={!selectedChromeProfile || isImporting}
-              className="bg-purple-600 hover:bg-purple-500"
+              className="bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)]"
             >
               {isImporting ? (
                 <>
@@ -453,10 +453,10 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!showDeleteDialog} onOpenChange={() => setShowDeleteDialog(null)}>
-        <DialogContent className="border-zinc-800 bg-zinc-900">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-white">Delete Profile?</DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-white/60">
               Are you sure you want to delete "{showDeleteDialog?.name}"? This action cannot be undone.
               All bookmarks, history, and settings for this profile will be permanently removed.
             </DialogDescription>
@@ -465,13 +465,13 @@ export function ProfilesPage({ onNavigate }: ProfilesPageProps) {
             <Button
               variant="ghost"
               onClick={() => setShowDeleteDialog(null)}
-              className="text-zinc-400 hover:text-white"
+              className="text-white/60 hover:text-white"
             >
               Cancel
             </Button>
             <Button
               onClick={handleDeleteProfile}
-              className="bg-red-600 hover:bg-red-500"
+              className="bg-[var(--error)] text-white hover:bg-[var(--error)]/85"
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete Profile

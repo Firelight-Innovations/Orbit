@@ -94,7 +94,7 @@ export function BookmarkContextMenu({
           Edit...
         </DropdownMenuItem>
 
-        <DropdownMenuItem onClick={onDelete} className="text-red-600">
+        <DropdownMenuItem onClick={onDelete} className="text-[var(--error)] focus:bg-[var(--error-soft)] focus:text-[var(--error)]">
           <Trash2 className="mr-2 h-4 w-4" />
           Delete
         </DropdownMenuItem>

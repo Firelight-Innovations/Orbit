@@ -1,9 +1,13 @@
+/*
+ * Window chrome. The title bar sits one step *below* the toolbar on the
+ * Simplicity scale (base #0d1117 vs raised #161b22) so the active tab can rise
+ * out of it and read as continuous with the navigation bar beneath.
+ */
 .title-bar {
   display: flex;
   align-items: center;
   height: 40px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-base);
   user-select: none;
   flex-shrink: 0;
 }
@@ -57,6 +61,11 @@
   color: var(--text-primary);
 }
 
+.window-control-btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
 .window-control-btn.close:hover {
   background: var(--error);
   color: white;
@@ -69,4 +78,3 @@
 .window-control-btn.maximize:hover {
   background: var(--bg-hover);
 }
-

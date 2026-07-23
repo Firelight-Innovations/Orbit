@@ -75,7 +75,7 @@ export function SearchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-black text-white">
+    <div className="min-h-screen bg-[var(--surface-base)] text-white">
       {/* Animated background stars */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         {[...Array(50)].map((_, i) => (
@@ -108,25 +108,25 @@ export function SearchPage() {
           className="mb-12"
         >
           <div className="flex items-center justify-center mb-8">
-            <Sparkles className="w-8 h-8 text-violet-400 mr-3" />
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-violet-400 to-purple-600 bg-clip-text text-transparent">
+            <Sparkles className="w-8 h-8 text-[var(--accent-primary)] mr-3" />
+            <h1 className="orbit-serif text-5xl text-white">
               Orbit Search
             </h1>
           </div>
 
           <form onSubmit={handleSubmit} className="relative">
             <div className="relative flex items-center">
-              <Search className="absolute left-4 w-5 h-5 text-zinc-400" />
+              <Search className="absolute left-4 w-5 h-5 text-white/40" />
               <input
                 ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search the cosmos..."
-                className="w-full pl-12 pr-4 py-4 bg-zinc-900/50 border border-zinc-700 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent backdrop-blur-sm transition-all"
+                className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-raised)] py-4 pl-12 pr-4 text-lg shadow-sm shadow-black/20 transition-colors placeholder:text-white/30 focus:border-[var(--border-default)] focus:outline-none"
               />
               {isLoading && (
-                <Loader2 className="absolute right-4 w-5 h-5 text-violet-400 animate-spin" />
+                <Loader2 className="absolute right-4 w-5 h-5 text-[var(--accent-primary)] animate-spin" />
               )}
             </div>
           </form>
@@ -149,15 +149,15 @@ export function SearchPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
                 >
-                  <Card className="bg-gradient-to-br from-violet-900/20 to-purple-900/20 border-violet-700/30">
+                  <Card className="border-[var(--research)]/25 bg-[var(--research-soft)]">
                     <CardContent className="p-6">
                       <div className="flex items-start gap-3">
-                        <Sparkles className="w-5 h-5 text-violet-400 mt-1 flex-shrink-0" />
+                        <Sparkles className="w-5 h-5 text-[var(--research)] mt-1 flex-shrink-0" />
                         <div className="flex-1">
-                          <h2 className="text-lg font-semibold text-violet-300 mb-2">
+                          <h2 className="mb-2 text-lg font-semibold text-[var(--research)]">
                             AI Overview
                           </h2>
-                          <p className="text-zinc-300 leading-relaxed">
+                          <p className="leading-relaxed text-white/85">
                             {searchResults.aiOverview.content}
                           </p>
                           {searchResults.aiOverview.sources.length > 0 && (
@@ -166,7 +166,7 @@ export function SearchPage() {
                                 <button
                                   key={idx}
                                   onClick={() => handleResultClick(source.url)}
-                                  className="text-xs px-3 py-1 bg-violet-800/30 hover:bg-violet-700/40 rounded-full text-violet-200 transition-colors"
+                                  className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1 text-xs text-white/70 transition-colors hover:border-[var(--border-default)] hover:text-white"
                                 >
                                   {source.title || new URL(source.url).hostname}
                                 </button>
@@ -189,7 +189,7 @@ export function SearchPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05 * (index + 1) }}
                   >
-                    <Card className="bg-zinc-900/40 border-zinc-800 hover:bg-zinc-900/60 hover:border-zinc-700 transition-all cursor-pointer group">
+                    <Card className="group cursor-pointer border-[var(--border-subtle)] bg-[var(--surface-raised)] transition-colors hover:border-[var(--border-default)]">
                       <CardContent className="p-5">
                         <button
                           onClick={() => handleResultClick(result.url)}
@@ -207,29 +207,29 @@ export function SearchPage() {
                               />
                             )}
                             {!result.faviconUrl && (
-                              <Globe className="w-6 h-6 text-zinc-500 mt-1 flex-shrink-0" />
+                              <Globe className="w-6 h-6 text-white/40 mt-1 flex-shrink-0" />
                             )}
                             <div className="flex-1 min-w-0">
-                              <h3 className="text-xl font-medium text-violet-300 group-hover:text-violet-200 mb-1 line-clamp-2">
+                              <h3 className="mb-1 line-clamp-2 text-xl font-medium text-[var(--accent-secondary)] transition-colors group-hover:text-[var(--accent-primary)]">
                                 {result.title}
                               </h3>
-                              <p className="text-sm text-zinc-500 mb-2 truncate">
+                              <p className="mb-2 truncate text-sm text-white/40">
                                 {new URL(result.url).hostname}
                               </p>
-                              <p className="text-zinc-400 line-clamp-2 leading-relaxed">
+                              <p className="line-clamp-2 leading-relaxed text-white/60">
                                 {result.snippet}
                               </p>
                               <div className="flex items-center gap-2 mt-3">
                                 <span className={`text-xs px-2 py-1 rounded-full ${
                                   result.source === 'google'
-                                    ? 'bg-blue-900/30 text-blue-300'
+                                    ? 'bg-[var(--accent-soft)] text-[var(--accent-secondary)]'
                                     : result.source === 'bing'
-                                    ? 'bg-green-900/30 text-green-300'
-                                    : 'bg-orange-900/30 text-orange-300'
+                                    ? 'bg-[var(--success)]/12 text-[var(--success)]'
+                                    : 'bg-[var(--warning)]/12 text-[var(--warning)]'
                                 }`}>
                                   {result.source}
                                 </span>
-                                <span className="text-xs text-zinc-600">
+                                <span className="text-xs text-white/25">
                                   #{result.positionInSource}
                                 </span>
                               </div>
@@ -248,12 +248,12 @@ export function SearchPage() {
                   animate={{ opacity: 1 }}
                   className="text-center py-12"
                 >
-                  <p className="text-zinc-500">No results found for "{searchResults.query}"</p>
+                  <p className="text-white/40">No results found for "{searchResults.query}"</p>
                 </motion.div>
               )}
 
               {searchResults.cached && (
-                <p className="text-center text-xs text-zinc-600 mt-4">
+                <p className="mt-4 text-center text-xs text-white/25">
                   Results from cache
                 </p>
               )}
@@ -268,8 +268,8 @@ export function SearchPage() {
             animate={{ opacity: 1 }}
             className="flex flex-col items-center justify-center py-20"
           >
-            <Loader2 className="w-12 h-12 text-violet-400 animate-spin mb-4" />
-            <p className="text-zinc-500">Searching across the web...</p>
+            <Loader2 className="w-12 h-12 text-[var(--accent-primary)] animate-spin mb-4" />
+            <p className="text-white/40">Searching across the web...</p>
           </motion.div>
         )}
 
@@ -280,8 +280,8 @@ export function SearchPage() {
             animate={{ opacity: 1 }}
             className="text-center py-20"
           >
-            <Sparkles className="w-16 h-16 text-violet-400 mx-auto mb-4 opacity-50" />
-            <p className="text-zinc-500 text-lg">Enter a query to search the cosmos</p>
+            <Sparkles className="w-16 h-16 text-[var(--accent-primary)] mx-auto mb-4 opacity-40" />
+            <p className="text-lg text-white/40">Enter a query to search the cosmos</p>
           </motion.div>
         )}
       </div>

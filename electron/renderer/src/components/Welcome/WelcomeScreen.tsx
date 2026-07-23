@@ -58,7 +58,7 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
     // Create a default profile
     setIsLoading(true)
     try {
-      const profile = await window.electronAPI.profile.createProfile('Default', '#8b5cf6')
+      const profile = await window.electronAPI.profile.createProfile('Default', '#24a0ed')
       setImportedProfileId(profile.id)
       setCurrentStep('complete')
     } catch (error) {
@@ -119,13 +119,12 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-gradient-to-br from-[#0a0a0b] via-[#0f0a14] to-[#0a0a0b]">
+    // Flat base tone. The purple/blue radial washes that used to sit over this
+    // are gone; Simplicity keeps its backgrounds unlit and lets the content
+    // carry the colour. The starfield stays as Orbit's own mark, retinted.
+    <div className="relative h-full w-full overflow-hidden bg-[var(--surface-base)]">
       {/* Animated starfield background */}
       <AnimatedStarfield starCount={150} />
-
-      {/* Subtle gradient overlays */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(139,92,246,0.08),transparent_50%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(59,130,246,0.06),transparent_50%)]" />
 
       {/* Content */}
       <div className="relative z-10 flex h-full w-full items-center justify-center px-8">
@@ -222,7 +221,7 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
 
       {/* Step indicator */}
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2">
-        <div className="flex items-center gap-3 rounded-full bg-black/30 backdrop-blur-sm px-6 py-3 border border-white/10">
+        <div className="flex items-center gap-3 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-6 py-3 shadow-sm shadow-black/20">
           {(['welcome', 'import-choice', 'profile-select', 'complete'] as const).map((step, index) => {
             const stepOrder = ['welcome', 'import-choice', 'profile-select', 'importing', 'complete']
             const currentIndex = stepOrder.indexOf(currentStep)
@@ -241,7 +240,7 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
               >
                 <div className={`h-full rounded-full ${
-                  isActive ? 'bg-gradient-to-r from-purple-500 to-blue-500' : 'bg-white/20'
+                  isActive ? 'bg-[var(--accent-primary)]' : 'bg-white/15'
                 }`} />
                 {isCurrent && (
                   <motion.div

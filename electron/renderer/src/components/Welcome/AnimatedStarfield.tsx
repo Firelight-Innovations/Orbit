@@ -59,8 +59,9 @@ export function AnimatedStarfield({ starCount = 150, className = '' }: AnimatedS
         canvas.height / 2,
         canvas.width * 0.7
       )
-      gradient.addColorStop(0, 'rgba(139, 92, 246, 0.08)')
-      gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.03)')
+      // Accent-tinted, matching --accent-primary (#24a0ed).
+      gradient.addColorStop(0, 'rgba(36, 160, 237, 0.06)')
+      gradient.addColorStop(0.5, 'rgba(36, 160, 237, 0.02)')
       gradient.addColorStop(1, 'transparent')
       ctx.fillStyle = gradient
       ctx.fillRect(0, 0, canvas.width, canvas.height)
@@ -81,7 +82,7 @@ export function AnimatedStarfield({ starCount = 150, className = '' }: AnimatedS
             star.x, star.y, 0,
             star.x, star.y, star.size * 2
           )
-          glowGradient.addColorStop(0, `rgba(139, 92, 246, ${star.opacity * 0.3})`)
+          glowGradient.addColorStop(0, `rgba(36, 160, 237, ${star.opacity * 0.3})`)
           glowGradient.addColorStop(1, 'transparent')
           ctx.fillStyle = glowGradient
           ctx.fill()

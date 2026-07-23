@@ -65,7 +65,7 @@ export function ProfileSelectStep({
         <Button
           variant="ghost"
           onClick={onBack}
-          className="text-zinc-400 hover:text-white"
+          className="text-white/60 hover:text-white"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
@@ -74,10 +74,10 @@ export function ProfileSelectStep({
 
       {/* Title */}
       <motion.div variants={itemVariants} className="mb-8 text-center">
-        <h2 className="mb-3 text-3xl font-bold text-white">
+        <h2 className="orbit-serif mb-3 text-4xl text-white">
           Select a Chrome Profile
         </h2>
-        <p className="text-lg text-zinc-400">
+        <p className="text-lg text-white/60">
           Choose which profile you'd like to import into Orbit
         </p>
       </motion.div>
@@ -88,8 +88,8 @@ export function ProfileSelectStep({
           variants={itemVariants}
           className="flex flex-col items-center justify-center py-12"
         >
-          <Loader2 className="mb-4 h-8 w-8 animate-spin text-purple-500" />
-          <p className="text-zinc-400">Detecting Chrome profiles...</p>
+          <Loader2 className="mb-4 h-8 w-8 animate-spin text-[var(--accent-primary)]" />
+          <p className="text-white/60">Detecting Chrome profiles...</p>
         </motion.div>
       )}
 
@@ -99,17 +99,17 @@ export function ProfileSelectStep({
           variants={itemVariants}
           className="flex flex-col items-center justify-center py-12 text-center"
         >
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800">
-            <User className="h-8 w-8 text-zinc-500" />
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--surface-subtle)]">
+            <User className="h-8 w-8 text-white/40" />
           </div>
           <h3 className="mb-2 text-lg font-medium text-white">
             No Chrome Profiles Found
           </h3>
-          <p className="mb-6 max-w-sm text-zinc-400">
+          <p className="mb-6 max-w-sm text-white/60">
             We couldn't find any Chrome profiles on your computer. 
             You can start fresh and import later.
           </p>
-          <Button onClick={onSkip} className="bg-purple-600 hover:bg-purple-500">
+          <Button onClick={onSkip} className="bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)]">
             Start Fresh Instead
           </Button>
         </motion.div>
@@ -128,13 +128,13 @@ export function ProfileSelectStep({
               custom={index}
             >
               <Card
-                className="group cursor-pointer border-zinc-800 bg-zinc-900/50 backdrop-blur-sm transition-all hover:border-purple-500/50 hover:bg-zinc-900"
+                className="group cursor-pointer border-[var(--border-subtle)] bg-[var(--surface-raised)] transition-colors hover:border-[var(--border-default)]"
                 onClick={() => onSelect(profile)}
               >
                 <CardContent className="flex items-center gap-4 p-4 pl-2.5">
-                  <Avatar className="h-10 w-10 ring-2 ring-zinc-700 transition-all group-hover:ring-purple-500/50">
+                  <Avatar className="h-10 w-10 ring-1 ring-[var(--border-default)] transition-colors group-hover:ring-[var(--accent-primary)]/50">
                     <AvatarImage src={profile.avatar} alt={profile.name} />
-                    <AvatarFallback className="bg-gradient-to-br from-purple-500 to-purple-700 text-white">
+                    <AvatarFallback className="bg-[var(--accent-primary)] text-white">
                       {getInitials(profile.name)}
                     </AvatarFallback>
                   </Avatar>
@@ -143,18 +143,18 @@ export function ProfileSelectStep({
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium text-white">{profile.name}</h3>
                       {profile.isDefault && (
-                        <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-xs text-purple-300">
+                        <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs text-[var(--accent-secondary)]">
                           Default
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-zinc-400">
+                    <p className="text-sm text-white/60">
                       {profile.email || '\u00A0'}
                     </p>
-                    <p className="text-xs text-zinc-500">{profile.directoryName}</p>
+                    <p className="text-xs text-white/40">{profile.directoryName}</p>
                   </div>
 
-                  <ChevronRight className="h-5 w-5 text-zinc-500 transition-all group-hover:translate-x-1 group-hover:text-purple-400" />
+                  <ChevronRight className="h-5 w-5 text-white/40 transition-all group-hover:translate-x-1 group-hover:text-[var(--accent-primary)]" />
                 </CardContent>
               </Card>
             </motion.div>
@@ -168,7 +168,7 @@ export function ProfileSelectStep({
           <Button
             variant="ghost"
             onClick={onSkip}
-            className="text-zinc-400 hover:text-white"
+            className="text-white/60 hover:text-white"
           >
             Skip and start fresh
           </Button>

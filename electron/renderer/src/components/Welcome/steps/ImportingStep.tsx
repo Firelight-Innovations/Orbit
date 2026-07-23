@@ -123,10 +123,10 @@ export function ImportingStep({ chromeProfile, onComplete, onError }: ImportingS
     >
       {/* Title */}
       <motion.div variants={itemVariants} className="mb-8">
-        <h2 className="mb-3 text-3xl font-bold text-white">
+        <h2 className="orbit-serif mb-3 text-4xl text-white">
           Importing Your Profile
         </h2>
-        <p className="text-lg text-zinc-400">
+        <p className="text-lg text-white/60">
           Bringing over your data from {chromeProfile.name}
         </p>
       </motion.div>
@@ -136,19 +136,19 @@ export function ImportingStep({ chromeProfile, onComplete, onError }: ImportingS
         variants={itemVariants}
         className="relative mb-8"
       >
-        <div className="flex h-32 w-32 items-center justify-center rounded-full bg-zinc-900 ring-4 ring-zinc-800">
+        <div className="flex h-32 w-32 items-center justify-center rounded-full bg-[var(--surface-raised)] ring-1 ring-[var(--border-subtle)]">
           {error ? (
-            <XCircle className="h-12 w-12 text-red-500" />
+            <XCircle className="h-12 w-12 text-[var(--error)]" />
           ) : progress === 100 ? (
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: 'spring', stiffness: 500, damping: 20 }}
             >
-              <CheckCircle2 className="h-12 w-12 text-green-500" />
+              <CheckCircle2 className="h-12 w-12 text-[var(--success)]" />
             </motion.div>
           ) : (
-            <Loader2 className="h-12 w-12 animate-spin text-purple-500" />
+            <Loader2 className="h-12 w-12 animate-spin text-[var(--accent-primary)]" />
           )}
         </div>
         
@@ -162,7 +162,7 @@ export function ImportingStep({ chromeProfile, onComplete, onError }: ImportingS
             cy="64"
             r="60"
             fill="none"
-            stroke="rgb(39, 39, 42)"
+            stroke="#21262d"
             strokeWidth="8"
           />
           <motion.circle
@@ -170,7 +170,7 @@ export function ImportingStep({ chromeProfile, onComplete, onError }: ImportingS
             cy="64"
             r="60"
             fill="none"
-            stroke={error ? 'rgb(239, 68, 68)' : 'rgb(139, 92, 246)'}
+            stroke={error ? '#f85149' : '#24a0ed'}
             strokeWidth="8"
             strokeLinecap="round"
             strokeDasharray={`${2 * Math.PI * 60}`}
@@ -184,7 +184,7 @@ export function ImportingStep({ chromeProfile, onComplete, onError }: ImportingS
       {/* Current phase */}
       <motion.p
         variants={itemVariants}
-        className={`mb-6 text-lg font-medium ${error ? 'text-red-400' : 'text-white'}`}
+        className={`mb-6 text-lg font-medium ${error ? 'text-[var(--error)]' : 'text-white'}`}
       >
         {currentPhase}
       </motion.p>
@@ -192,7 +192,7 @@ export function ImportingStep({ chromeProfile, onComplete, onError }: ImportingS
       {/* Progress bar */}
       <motion.div variants={itemVariants} className="mb-8 w-full max-w-md">
         <Progress value={progress} className="h-2" />
-        <p className="mt-2 text-sm text-zinc-500">{progress}% complete</p>
+        <p className="mt-2 text-sm text-white/40">{progress}% complete</p>
       </motion.div>
 
       {/* Import steps */}
@@ -205,12 +205,12 @@ export function ImportingStep({ chromeProfile, onComplete, onError }: ImportingS
             key={step.id}
             className={`flex flex-col items-center gap-1 rounded-lg p-2 transition-colors ${
               step.status === 'complete'
-                ? 'bg-green-500/10 text-green-400'
+                ? 'bg-[var(--success)]/10 text-[var(--success)]'
                 : step.status === 'active'
-                ? 'bg-purple-500/10 text-purple-400'
+                ? 'bg-[var(--accent-soft)] text-[var(--accent-primary)]'
                 : step.status === 'error'
-                ? 'bg-red-500/10 text-red-400'
-                : 'bg-zinc-800/50 text-zinc-500'
+                ? 'bg-[var(--error-soft)] text-[var(--error)]'
+                : 'bg-[var(--surface-subtle)] text-white/40'
             }`}
           >
             <div className="flex h-8 w-8 items-center justify-center">
@@ -239,10 +239,10 @@ export function ImportingStep({ chromeProfile, onComplete, onError }: ImportingS
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-6 rounded-lg bg-red-500/10 p-4 text-red-400"
+          className="mt-6 rounded-xl border border-[var(--error)]/30 bg-[var(--error-soft)] p-4 text-[var(--error)]"
         >
           <p className="text-sm">{error}</p>
-          <p className="mt-1 text-xs text-red-400/60">Returning to profile selection...</p>
+          <p className="mt-1 text-xs text-[var(--error)]/60">Returning to profile selection...</p>
         </motion.div>
       )}
     </motion.div>
