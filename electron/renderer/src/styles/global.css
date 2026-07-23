@@ -33,11 +33,9 @@
     --surface-subtle: #21262d;
     --surface-strong: #30363d;
 
-    /* Backgrounds, named by role. All resolve to the scale above. */
+    /* Interaction states, named by role. All resolve to the scale above. */
     --bg-primary: var(--surface-base);
-    --bg-secondary: var(--surface-raised);
     --bg-tertiary: var(--surface-base);
-    --bg-elevated: var(--surface-raised);
     --bg-hover: var(--surface-subtle);
     --bg-active: var(--surface-strong);
 
@@ -49,7 +47,6 @@
     --text-primary: rgba(255, 255, 255, 0.92);
     --text-secondary: rgba(255, 255, 255, 0.6);
     --text-muted: rgba(255, 255, 255, 0.38);
-    --text-faint: rgba(255, 255, 255, 0.22);
 
     /* Actions. */
     --accent-primary: #24a0ed;
@@ -79,7 +76,6 @@
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.45);
 
     --transition-fast: 120ms ease;
