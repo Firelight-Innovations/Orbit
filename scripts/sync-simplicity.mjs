@@ -28,7 +28,11 @@ const BRANCH = 'desktop';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dir = path.join(root, 'vendor', 'simplicity');
-const stampFile = path.join(dir, '.orbit-build-stamp');
+/* Deliberately a sibling of the clone, not inside it: sync() runs
+   `git clean -fd`, and a stamp living in the working tree is untracked and not
+   in upstream's .gitignore, so it was deleted on every single sync — which
+   silently disabled the build cache this file exists to provide. */
+const stampFile = path.join(path.dirname(dir), '.simplicity-build-stamp');
 
 const log = (msg) => console.log(`[simplicity] ${msg}`);
 
