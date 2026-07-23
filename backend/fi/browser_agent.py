@@ -167,7 +167,7 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     browser = registry.get("browser_instance")
     
     if browser is None or browser.page is None:
-        return "Error: Not connected to browser. Please click the Connect button first."
+        return "Error: Not connected to browser."
     
     page = browser.page
     
@@ -191,8 +191,12 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
             
         elif name == "navigate_to":
             url = arguments.get("url", "")
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            return f"Navigated to {url}"
+            # Route through Orbit's tab system so the page loads in the real
+            # browser tab (created if the active tab is orbit://newtab), not in
+            # a raw CDP renderer like the assistant sidebar.
+            result_page = await browser.navigate_active_tab(url)
+            landed = result_page.url if result_page else url
+            return f"Navigated to {landed}"
             
         elif name == "scroll_page":
             direction = arguments.get("direction", "down")

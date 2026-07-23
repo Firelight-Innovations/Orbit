@@ -280,6 +280,90 @@ class BrowserInstance:
             await self.switch_to_page(match)
         return self.page
 
+    async def _find_orbit_bridge_page(self) -> Page | None:
+        """Find an Orbit renderer page that exposes window.electronAPI.
+
+        The UI view and the sidebar both load Orbit's preload, so either can be
+        used to drive Orbit's own tab IPC. Real web pages and the blank root do
+        not have electronAPI and are skipped.
+        """
+        if not self.context:
+            return None
+        for p in self.context.pages:
+            if p.is_closed():
+                continue
+            try:
+                has_api = await p.evaluate(
+                    "() => !!(window.electronAPI"
+                    " && window.electronAPI.navigate"
+                    " && window.electronAPI.getTabState)"
+                )
+            except Exception:
+                has_api = False
+            if has_api:
+                return p
+        return None
+
+    async def _await_navigated_page(self, url: str, timeout: float = 15.0) -> Page | None:
+        """Wait for the real tab that Orbit navigated to `url` to appear/settle.
+
+        Prefers a non-internal page whose host matches the target; otherwise
+        returns the most recently seen web page. Returns None if none appears.
+        """
+        target = self._normalize_url(url)
+        thost = target.split("://")[-1].split("/")[0]
+        if thost.startswith("www."):
+            thost = thost[4:]
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + timeout
+        newest: Page | None = None
+        while loop.time() < deadline:
+            web_pages = [
+                p for p in self.context.pages
+                if not p.is_closed() and not self._is_internal_url(p.url)
+            ]
+            for p in web_pages:
+                if thost and thost in self._normalize_url(p.url):
+                    return p
+            if web_pages:
+                newest = web_pages[-1]
+            await asyncio.sleep(0.25)
+        return newest
+
+    async def navigate_active_tab(self, url: str) -> Page:
+        """Navigate Orbit's active tab to `url` through Orbit's own tab IPC.
+
+        This drives the real browser tab (creating a tab view if the active tab
+        is an internal page like orbit://newtab), rather than doing page.goto on
+        a raw CDP target that may be an Orbit renderer (the sidebar/UI). After
+        navigating, self.page is repointed to the resulting web tab so later
+        tools act on the right page.
+        """
+        bridge = await self._find_orbit_bridge_page()
+        if bridge is None:
+            # No Orbit bridge; only safe to navigate if we're already on a real
+            # web page (never navigate an Orbit renderer).
+            if self.page and not self._is_internal_url(self.page.url):
+                await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                return self.page
+            raise RuntimeError("Could not reach Orbit's tab controls to navigate.")
+
+        await bridge.evaluate(
+            """async (u) => {
+                const state = await window.electronAPI.getTabState();
+                const id = state && state.activeTabId;
+                if (!id) throw new Error('no active tab');
+                await window.electronAPI.navigate(id, u);
+                return id;
+            }""",
+            url,
+        )
+
+        page = await self._await_navigated_page(url)
+        if page is not None and page is not self.page:
+            await self.switch_to_page(page)
+        return self.page
+
     async def _inject_scripts_to_page(self, page: Page) -> None:
         """
         Inject required scripts into a specific page.
