@@ -9,8 +9,6 @@ import {
   FileText,
   HelpCircle,
   X,
-  Wifi,
-  WifiOff,
   ChevronRight,
   Check,
   AlertCircle,
@@ -56,7 +54,7 @@ const MODE_CONFIG: Record<AssistantMode, {
 };
 
 export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: AssistantSidebarProps) {
-  const { isSending, messages, pageContext, mode, activeTab, connectionStatus, conversationId } = useAssistantStore((s) => s);
+  const { isSending, messages, pageContext, mode, activeTab, conversationId } = useAssistantStore((s) => s);
   const [input, setInput] = useState('');
   const [showModePicker, setShowModePicker] = useState(false);
   const [useStreaming, setUseStreaming] = useState(true);
@@ -70,13 +68,6 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
   useEffect(() => {
     assistantStore.setPageContext({ url: activeUrl ?? null, selectedText: selectedText ?? null });
   }, [activeUrl, selectedText]);
-
-  // Check connection status on mount and when mode changes to agent
-  useEffect(() => {
-    if (mode === 'agent') {
-      assistantStore.refreshStatus();
-    }
-  }, [mode]);
 
   // Handle Escape
   useEffect(() => {
@@ -261,10 +252,6 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
     }
   };
 
-  const handleConnect = async () => {
-    await assistantStore.connect();
-  };
-
   const handleModeChange = (newMode: AssistantMode) => {
     assistantStore.setMode(newMode);
     setShowModePicker(false);
@@ -365,22 +352,6 @@ export function AssistantSidebar({ activeUrl, selectedText, topOffset = 0 }: Ass
             <TabButton tab="workflows" label="Workflows" />
          </div>
          <div className="flex items-center gap-2">
-            {/* Connection status for agent mode */}
-            {mode === 'agent' && (
-              <button 
-                onClick={handleConnect}
-                className={cn(
-                  "flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors",
-                  connectionStatus.connected 
-                    ? "text-emerald-400 bg-emerald-400/10" 
-                    : "text-white/40 bg-white/5 hover:bg-white/10"
-                )}
-                title={connectionStatus.connected ? `Connected: ${connectionStatus.pageUrl}` : 'Click to connect'}
-              >
-                {connectionStatus.connected ? <Wifi size={12} /> : <WifiOff size={12} />}
-                <span>{connectionStatus.connected ? 'Connected' : 'Connect'}</span>
-              </button>
-            )}
             {/* Clear chat button */}
             {messages.length > 0 && (
               <button 

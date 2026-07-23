@@ -10,6 +10,13 @@ import { closeAISearchService } from './services/aiSearchService'
 // Note: Port 9222 is freed by scripts/free-port.js before Electron starts
 app.commandLine.appendSwitch('remote-debugging-port', '9222')
 
+// Disable Electron's prewarmed "spare" renderer so it can't surface as an
+// extra empty-URL CDP page target. (Note: the main hang was the window's own
+// root webContents having no document — fixed by loading a blank doc into it
+// in createWindow. This switch just keeps stray spare renderers from adding
+// more unresponsive targets for Playwright's connect_over_cdp() to attach to.)
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess')
+
 // Get the app icon path
 const iconPath = join(__dirname, '../../resources/orbit_logo.png')
 
@@ -482,6 +489,19 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
     icon: iconPath
   })
 
+  // Load a blank document into the window's root webContents. All real content
+  // lives in child WebContentsViews (UI/sidebar/tabs), so the root would
+  // otherwise stay a document-less "empty URL" page target. Playwright's
+  // connect_over_cdp() auto-attaches to every page target and blocks forever on
+  // that one (Page.enable/Runtime.enable never respond), hanging the AI agent's
+  // browser connection for the full timeout. Giving the root a real (dark,
+  // to match backgroundColor and avoid a white flash behind the transparent UI)
+  // document makes it respond immediately so the connection succeeds.
+  mainWindow.loadURL(
+    'data:text/html,' +
+      encodeURIComponent('<!doctype html><meta charset="utf-8"><body style="margin:0;background:#0f0f0f"></body>')
+  )
+
   // Create the UI WebContentsView (React app) - this will be on TOP
   const uiView = new WebContentsView({
     webPreferences: {
@@ -605,8 +625,13 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
       showTabView(mainWindow, activeTabId)
     }
 
-    // Open DevTools on launch so a debugging console is always available
-    uiView.webContents.openDevTools({ mode: 'detach' })
+    // Open DevTools on launch only when explicitly requested. An open DevTools
+    // window shows up as a `devtools://` CDP page target that Playwright's
+    // connect_over_cdp() tries to auto-attach to and hangs on (15s timeout),
+    // which breaks the AI agent's browser connection. Opt in with ORBIT_DEVTOOLS=1.
+    if (process.env['ORBIT_DEVTOOLS'] === '1') {
+      uiView.webContents.openDevTools({ mode: 'detach' })
+    }
   })
 
   // Watch shortcuts for dev tools

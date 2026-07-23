@@ -68,8 +68,8 @@ class BrowserInstance:
             return False
 
     async def connect_via_cdp(
-        self, 
-        cdp_url: str | None = None, 
+        self,
+        cdp_url: str | None = None,
         port: int | None = None,
         max_retries: int = 3,
         retry_delay: float = 1.0
@@ -98,15 +98,15 @@ class BrowserInstance:
             cdp_url = f"http://127.0.0.1:{target_port}"
         
         last_error: Exception | None = None
-        
+
         for attempt in range(max_retries):
             try:
                 logger.info(f"Connecting to browser via CDP at {cdp_url} (attempt {attempt + 1}/{max_retries})")
-                
+
                 # Start Playwright if not already started
                 if not self.playwright:
                     self.playwright = await async_playwright().start()
-                
+
                 # Connect to existing browser via CDP (with 15 second timeout)
                 self.browser = await self.playwright.chromium.connect_over_cdp(cdp_url, timeout=15000)
                 
@@ -116,8 +116,12 @@ class BrowserInstance:
                     self.context = contexts[0]
                     pages = self.context.pages
                     if pages:
-                        # Use the first available page (usually the active tab)
-                        self.page = pages[0]
+                        # Prefer a real web page over Orbit's own renderers (the
+                        # UI view, the sidebar, and the window-root blank doc are
+                        # all in this context). resolve_active_page() refines this
+                        # per-request from the foreground tab URL.
+                        web_pages = [p for p in pages if not self._is_internal_url(p.url)]
+                        self.page = web_pages[0] if web_pages else pages[0]
                         logger.info(f"Connected to existing page: {self.page.url}")
                     else:
                         # No pages exist, create one
@@ -212,6 +216,22 @@ class BrowserInstance:
             self.page = None
             self.cursor = None
             logger.info("Active tab closed; no surviving pages")
+
+    @staticmethod
+    def _is_internal_url(url: str | None) -> bool:
+        """True for Orbit's own renderers/blank targets (not drivable web pages).
+
+        Covers the UI view and sidebar (localhost:5173 in dev, file:// in prod),
+        the window-root blank data: doc, and browser-internal schemes.
+        """
+        if not url:
+            return True
+        u = url.lower()
+        if u.startswith(("about:", "data:", "chrome:", "devtools:", "orbit://", "file://")):
+            return True
+        if "localhost:5173" in u or "/sidebar.html" in u or "/index.html" in u:
+            return True
+        return False
 
     @staticmethod
     def _normalize_url(url: str | None) -> str:
