@@ -1,7 +1,12 @@
 import { useSyncExternalStore } from 'react'
 
 export type AssistantRole = 'user' | 'assistant'
-export type AssistantMode = 'ask' | 'agent' | 'plan'
+/**
+ * `plan` was retired from the UI. The backend still understands the string, it
+ * is simply unreachable from here — see components/Assistant/modes.ts, whose
+ * `normalizeMode` folds any stale `plan` value back to `ask`.
+ */
+export type AssistantMode = 'ask' | 'agent'
 export type AssistantTab = 'chat' | 'workflows'
 export type ToolCallStatus = 'pending' | 'running' | 'completed' | 'error'
 
@@ -174,6 +179,16 @@ export const assistantStore = {
       messages: prev.messages.map((msg) => (msg.id === id ? { ...msg, ...updates } : msg))
     })),
   clearMessages: () => setState({ messages: [], conversationId: newConversationId() }),
+
+  /**
+   * Restore a conversation from renderer history.
+   *
+   * The original `conversationId` comes back with it — the backend keys its own
+   * server-side history on that value, so reusing it is what lets a resumed
+   * chat continue where it left off rather than starting a fresh bucket.
+   */
+  loadConversation: (conversationId: string, messages: AssistantMessage[]) =>
+    setState({ conversationId, messages, isSending: false }),
   
   // Streaming support
   appendChunk: (id: string, chunk: string) =>
@@ -330,7 +345,10 @@ export const assistantStore = {
   
   // State management
   setSending: (isSending: boolean) => setState({ isSending }),
-  setMode: (mode: AssistantMode) => setState({ mode }),
+  // Narrowed defensively: a retired mode string arriving from anywhere (an old
+  // persisted value, a restored message) must never leave the UI with a mode it
+  // has no config for.
+  setMode: (mode: AssistantMode) => setState({ mode: mode === 'agent' ? 'agent' : 'ask' }),
   setActiveTab: (activeTab: AssistantTab) => setState({ activeTab }),
   
   // Connection status

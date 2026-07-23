@@ -16,16 +16,28 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class StreamEvent:
-    """Event emitted during streaming execution."""
-    
-    type: str  # "chunk", "tool_start", "tool_end", "thinking", "done", "error"
+    """Event emitted during streaming execution.
+
+    The wire shape is documented on the renderer side in
+    electron/renderer/src/components/Assistant/agentEvents.ts -- that file and
+    this dataclass are two halves of the same contract, so change them together.
+    """
+
+    type: str  # "chunk", "tool_start", "tool_end", "thought", "status", "done", "error"
     content: str = ""
     tool_name: str | None = None
     tool_args: dict[str, Any] | None = None
     tool_result: str | None = None
-    
+    # Correlates a tool_start with its tool_end. The renderer falls back to
+    # "most recent running step with this name" without it, which misattributes
+    # results when one turn calls the same tool twice.
+    id: str | None = None
+    status: str | None = None  # "ok" | "error", on tool_end
+    error: str | None = None
+    screenshot: str | None = None  # data URI of the marked page image
+
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary, excluding None values."""
+        """Convert to dictionary, excluding empty values."""
         result = {"type": self.type}
         if self.content:
             result["content"] = self.content
@@ -35,6 +47,14 @@ class StreamEvent:
             result["tool_args"] = self.tool_args
         if self.tool_result is not None:
             result["tool_result"] = self.tool_result
+        if self.id:
+            result["id"] = self.id
+        if self.status:
+            result["status"] = self.status
+        if self.error:
+            result["error"] = self.error
+        if self.screenshot:
+            result["screenshot"] = self.screenshot
         return result
     
     def to_sse(self) -> str:
@@ -191,25 +211,50 @@ async def stream_agent_execution(
     Yields:
         StreamEvent objects
     """
-    # Emit thinking event first
-    yield StreamEvent(
-        type="thinking",
-        content=f"Processing in {mode} mode..."
-    )
+    yield StreamEvent(type="status", content="Thinking")
 
     try:
         # Use browser agent for agent mode (has tools), simple agent for ask/plan
         if mode == "agent":
             from fi.browser_agent import run_with_tools
-            result = await run_with_tools(
-                message,
-                conversation_id=conversation_id,
-                active_url=active_url,
+
+            # The agent loop runs to completion before returning its answer, so
+            # tool events have to come out sideways: the agent pushes them onto
+            # this queue as it goes and we drain it while it works. Awaiting the
+            # agent first and replaying afterwards would show every step at once
+            # the moment the turn ended, which is not streaming.
+            queue: asyncio.Queue[StreamEvent] = asyncio.Queue()
+
+            async def on_event(event: StreamEvent) -> None:
+                await queue.put(event)
+
+            task = asyncio.create_task(
+                run_with_tools(
+                    message,
+                    conversation_id=conversation_id,
+                    active_url=active_url,
+                    on_event=on_event,
+                )
             )
+
+            # Drain whatever is queued until the agent finishes. The timeout is
+            # what keeps this loop responsive to task completion when the agent
+            # is quiet (e.g. a long model call with no tool activity).
+            while not task.done():
+                try:
+                    yield await asyncio.wait_for(queue.get(), timeout=0.1)
+                except asyncio.TimeoutError:
+                    continue
+
+            # The agent can queue events between its last yield and returning.
+            while not queue.empty():
+                yield queue.get_nowait()
+
+            result = await task
         else:
             from fi.agent import run as agent_run
             result = await agent_run(message)
-        
+
         # Stream the result in chunks for better UX
         if result:
             # Split into paragraphs for natural streaming

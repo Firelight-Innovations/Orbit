@@ -1,13 +1,18 @@
 import React from 'react'
-import { Compass, Hammer, ListChecks } from 'lucide-react'
+import { Compass, Hammer } from 'lucide-react'
 import { AssistantMode } from '@/stores/assistantStore'
 
 /**
- * The three assistant modes, in one place so the composer, the mode picker and
- * the empty state can't drift apart.
+ * The assistant modes, in one place so the composer, the mode picker and the
+ * empty state can't drift apart.
  *
  * Accents follow Simplicity's palette: sky for asking, teal for agentic work
- * (it reserves teal for research state), purple for planning.
+ * (it reserves teal for research state).
+ *
+ * NOTE: `plan` used to be a third mode. It was removed from the UI — the
+ * backend still understands it, it is simply unreachable from here. Anything
+ * that could still be holding the string (localStorage from an older build, a
+ * message saved in conversation history) goes through `normalizeMode` below.
  */
 export interface ModeConfig {
   icon: React.ElementType
@@ -37,16 +42,22 @@ export const MODES: Record<AssistantMode, ModeConfig> = {
     headline: 'Let the agent drive.',
     blurb: 'It navigates, clicks and reads — every step shown as it happens.',
     accentText: 'text-teal-400'
-  },
-  plan: {
-    icon: ListChecks,
-    tagline: 'Break a task into steps before running it',
-    placeholder: 'Describe what you want to plan…',
-    headline: 'Plan it out first.',
-    blurb: 'Turn a fuzzy goal into an ordered set of steps.',
-    accentText: 'text-[#ce93d8]'
   }
 }
 
 /** Display order for the picker. */
-export const MODE_ORDER: AssistantMode[] = ['ask', 'agent', 'plan']
+export const MODE_ORDER: AssistantMode[] = ['ask', 'agent']
+
+/**
+ * Coerce anything that claims to be a mode into one we can actually render.
+ * Retired modes (`plan`) and junk both fall back to `ask`, so a stale value can
+ * never leave the empty state or the composer with nothing to draw.
+ */
+export function normalizeMode(value: unknown): AssistantMode {
+  return value === 'agent' ? 'agent' : 'ask'
+}
+
+/** Config for a mode, defensive against a value that slipped past normalization. */
+export function modeConfig(mode: AssistantMode): ModeConfig {
+  return MODES[mode] ?? MODES.ask
+}
