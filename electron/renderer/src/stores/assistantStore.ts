@@ -14,6 +14,54 @@ export interface ToolCall {
   error?: string
 }
 
+/**
+ * Agent work timeline.
+ *
+ * A step is one visible unit of "what the agent did": a thought, a tool call, a
+ * navigation, a search. The renderer builds these from the SSE stream — see
+ * components/Assistant/agentEvents.ts for the wire contract the backend fills.
+ */
+/**
+ * Only affects which icon a step gets. `tool` is the catch-all — any tool name
+ * the UI doesn't recognise lands there and still renders correctly.
+ */
+export type AgentStepKind = 'thought' | 'tool' | 'search' | 'navigate' | 'read' | 'interact'
+export type AgentStepStatus = 'running' | 'done' | 'error'
+
+/** A citation backing the answer. `id` is the URL unless the backend gives one. */
+export interface AgentSource {
+  id: string
+  url: string
+  title?: string
+  snippet?: string
+  favicon?: string
+}
+
+export interface AgentStep {
+  id: string
+  kind: AgentStepKind
+  /** Human sentence shown in the timeline, e.g. "Navigating to google.com". */
+  label: string
+  /** Longer body — reasoning text for thoughts. */
+  detail?: string
+  status: AgentStepStatus
+  toolName?: string
+  args?: Record<string, unknown>
+  result?: string
+  error?: string
+  startedAt: number
+  endedAt?: number
+  /** Results this step produced, if any. */
+  sources?: AgentSource[]
+  /**
+   * The agent's view at this step — e.g. the 1024x1024 set-of-marks screenshot
+   * the harness captures per turn. Any value usable as an <img src> works: a
+   * `data:image/...;base64,...` URI or an http(s) URL. Shown in the expanded
+   * step detail; omitted entirely when absent.
+   */
+  screenshot?: string
+}
+
 export interface AssistantMessage {
   id: string
   role: AssistantRole
@@ -23,6 +71,12 @@ export interface AssistantMessage {
   error?: string | null
   mode?: AssistantMode
   toolCalls?: ToolCall[]
+  /** Ordered record of the agent's work for this turn. */
+  steps?: AgentStep[]
+  /** Merged, de-duplicated citations for this turn. */
+  sources?: AgentSource[]
+  /** Transient "what I'm doing right now" line; cleared when the turn ends. */
+  statusLabel?: string | null
   timestamp?: number
 }
 
@@ -132,14 +186,122 @@ export const assistantStore = {
       )
     })),
   
+  // Finishes a turn: stops the caret, drops the transient status line, and
+  // closes out any step the backend never sent a tool_end for.
   completeStreaming: (id: string) =>
     setState((prev) => ({
       ...prev,
       messages: prev.messages.map((msg) =>
-        msg.id === id ? { ...msg, streaming: false, pending: false } : msg
+        msg.id === id
+          ? {
+              ...msg,
+              streaming: false,
+              pending: false,
+              statusLabel: null,
+              steps: msg.steps?.map((step) =>
+                step.status === 'running'
+                  ? { ...step, status: 'done' as AgentStepStatus, endedAt: Date.now() }
+                  : step
+              )
+            }
+          : msg
       )
     })),
-  
+
+  // Terminal failure for a turn. Mirrors completeStreaming so a half-finished
+  // timeline doesn't keep spinning after an error.
+  failMessage: (id: string, error: string) =>
+    setState((prev) => ({
+      ...prev,
+      messages: prev.messages.map((msg) =>
+        msg.id === id
+          ? {
+              ...msg,
+              streaming: false,
+              pending: false,
+              statusLabel: null,
+              error,
+              steps: msg.steps?.map((step) =>
+                step.status === 'running'
+                  ? { ...step, status: 'error' as AgentStepStatus, endedAt: Date.now() }
+                  : step
+              )
+            }
+          : msg
+      )
+    })),
+
+  // --- Agent work timeline -------------------------------------------------
+
+  setStatusLabel: (id: string, statusLabel: string | null) =>
+    setState((prev) => ({
+      ...prev,
+      messages: prev.messages.map((msg) => (msg.id === id ? { ...msg, statusLabel } : msg))
+    })),
+
+  addStep: (messageId: string, step: AgentStep) =>
+    setState((prev) => ({
+      ...prev,
+      messages: prev.messages.map((msg) =>
+        msg.id === messageId ? { ...msg, steps: [...(msg.steps || []), step] } : msg
+      )
+    })),
+
+  updateStep: (messageId: string, stepId: string, updates: Partial<AgentStep>) =>
+    setState((prev) => ({
+      ...prev,
+      messages: prev.messages.map((msg) =>
+        msg.id === messageId
+          ? {
+              ...msg,
+              steps: msg.steps?.map((step) =>
+                step.id === stepId ? { ...step, ...updates } : step
+              )
+            }
+          : msg
+      )
+    })),
+
+  // Fallback correlation for backends that don't send a stable call id: close
+  // the most recent still-running step, preferring one matching `toolName`.
+  resolveRunningStep: (
+    messageId: string,
+    toolName: string | undefined,
+    updates: Partial<AgentStep>
+  ) =>
+    setState((prev) => ({
+      ...prev,
+      messages: prev.messages.map((msg) => {
+        if (msg.id !== messageId || !msg.steps?.length) return msg
+        const running = msg.steps
+          .map((step, index) => ({ step, index }))
+          .filter(({ step }) => step.status === 'running')
+        const match =
+          [...running].reverse().find(({ step }) => !toolName || step.toolName === toolName) ??
+          [...running].reverse()[0]
+        if (!match) return msg
+        return {
+          ...msg,
+          steps: msg.steps.map((step, index) =>
+            index === match.index ? { ...step, ...updates } : step
+          )
+        }
+      })
+    })),
+
+  // Merge citations, de-duplicated by url so repeated `sources` events are safe.
+  addSources: (messageId: string, sources: AgentSource[]) =>
+    setState((prev) => ({
+      ...prev,
+      messages: prev.messages.map((msg) => {
+        if (msg.id !== messageId || !sources.length) return msg
+        const seen = new Set((msg.sources || []).map((source) => source.url))
+        const added = sources.filter((source) => !seen.has(source.url))
+        return added.length ? { ...msg, sources: [...(msg.sources || []), ...added] } : msg
+      })
+    })),
+
+
   // Tool call tracking
   addToolCall: (messageId: string, toolCall: ToolCall) =>
     setState((prev) => ({
