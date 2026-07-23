@@ -185,9 +185,16 @@ export class SimplicityService {
     this.searxng = (await import(/* @vite-ignore */ pathToFileURL(modulePath).href)) as SearxngModule
 
     console.log('[Simplicity] starting SearXNG (first run downloads ~150MB)...')
-    const url = await this.searxng.start(this.dataDir, (msg) => console.log(`[Simplicity/SearXNG] ${msg}`))
-    console.log(`[Simplicity] SearXNG ready at ${url}`)
-    return url
+    const restorePath = preferSystemTar()
+    try {
+      const url = await this.searxng.start(this.dataDir, (msg) =>
+        console.log(`[Simplicity/SearXNG] ${msg}`),
+      )
+      console.log(`[Simplicity] SearXNG ready at ${url}`)
+      return url
+    } finally {
+      restorePath()
+    }
   }
 
   /* Lay out DATA_DIR the way Simplicity's server expects, and pre-answer its
@@ -351,6 +358,35 @@ export class SimplicityService {
 
       setTimeout(resolve, 8000)
     })
+  }
+}
+
+/* Make `tar` resolve to the bsdtar Windows ships in System32, for as long as
+   provisioning runs.
+ *
+ * Simplicity's provisioner unpacks the Python runtime with a bare `tar`,
+ * assuming the Windows one — bsdtar understands `C:\...` paths. Git for
+ * Windows also installs a GNU tar, and whenever Orbit is launched from a shell
+ * carrying Git's usr/bin (Git Bash, most dev setups) that one wins the PATH
+ * lookup. GNU tar parses `C:\Users\...` as a host:path remote spec and tries
+ * to reach a machine called "C", failing with:
+ *
+ *   tar (child): Cannot connect to C: resolve failed
+ *   gzip: stdin: unexpected end of file
+ *
+ * Reordering PATH fixes it for his child process without editing his code —
+ * one less patch to carry across his updates. Restored immediately after, so
+ * nothing else in the app inherits the change. */
+function preferSystemTar(): () => void {
+  if (process.platform !== 'win32') return () => {}
+
+  const system32 = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32')
+  if (!fs.existsSync(join(system32, 'tar.exe'))) return () => {}
+
+  const original = process.env.PATH
+  process.env.PATH = `${system32};${original ?? ''}`
+  return () => {
+    process.env.PATH = original
   }
 }
 

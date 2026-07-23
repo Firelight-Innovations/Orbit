@@ -834,16 +834,21 @@ app.whenReady().then(async () => {
   // Port 9222 is freed by the predev script before Electron starts
   console.log(`Remote debugging enabled on port ${debuggingPort}`)
 
-  // Start Python backend
-  pythonBackend = new PythonBackend()
-  await pythonBackend.start()
-
   // Start Simplicity (search) in the background. Deliberately not awaited: a
   // first run provisions a Python runtime and SearXNG, and the window should
   // not wait on that. Search views show progress and pick it up when ready.
+  //
+  // Kicked off *before* the Python backend because the two are unrelated and
+  // PythonBackend.start() resolves only on a startup log line or a 90s
+  // timeout — so a backend that dies on boot (or is simply slow) would
+  // otherwise hold search provisioning hostage for a minute and a half.
   getSimplicityService()
     .start()
     .catch((err) => console.error('[Simplicity] background start failed:', err?.message ?? err))
+
+  // Start Python backend
+  pythonBackend = new PythonBackend()
+  await pythonBackend.start()
 
   // Setup IPC handlers
   setupIpcHandlers(windowStates, createWindowWithTabs, pythonBackend)
