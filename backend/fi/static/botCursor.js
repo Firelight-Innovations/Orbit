@@ -1,307 +1,342 @@
-window.addEventListener('DOMContentLoaded', () => {
-    // --- 1. DEFINE STYLES ---
-    const style = document.createElement('style');
-    style.textContent = `
-        #bot-cursor {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 24px;
-            height: 24px;
-            background: rgba(59, 130, 246, 0.4);
-            border: 2px solid rgba(255, 255, 255, 0.8);
-            border-radius: 50%;
-            z-index: 10001; /* Higher than other elements */
-            pointer-events: none; /* Cursor should not be interactive */
-            transition: transform 0.1s ease-out, width 0.2s ease, height 0.2s ease, background-color 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+(() => {
+    // This file is injected twice per page: once with page.evaluate() (for the
+    // page that is already open) and once with add_init_script() (for every
+    // later navigation). Bail out if we already ran so we never stack two
+    // cursors -- two rAF loops writing the same transform is what made the old
+    // cursor look like it was teleporting.
+    if (window.botCursorAPI) return;
+
+    // Tip of the arrow inside the SVG viewBox. Translating the wrapper by
+    // (x - HOTSPOT_X, y - HOTSPOT_Y) puts the tip exactly on the click point.
+    const HOTSPOT_X = 2;
+    const HOTSPOT_Y = 2;
+    const TRAIL_INTERVAL_MS = 40;
+
+    function init() {
+        // --- 1. STYLES ---
+        const style = document.createElement('style');
+        style.textContent = `
+            #bot-cursor {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 22px;
+                height: 30px;
+                z-index: 2147483647;
+                pointer-events: none;
+                display: block;
+                will-change: transform;
+                /* No transform transition here: the rAF loop owns translation.
+                   A CSS transition on top of it fights the animation frames. */
+            }
+
+            #bot-cursor-arrow {
+                position: absolute;
+                top: 0;
+                left: 0;
+                transform-origin: ${HOTSPOT_X}px ${HOTSPOT_Y}px;
+                transition: transform 0.12s ease-out;
+                filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+            }
+
+            #bot-cursor-ring {
+                position: absolute;
+                top: ${HOTSPOT_Y}px;
+                left: ${HOTSPOT_X}px;
+                width: 14px;
+                height: 14px;
+                margin: -7px 0 0 -7px;
+                border: 2px solid rgba(59, 130, 246, 0.9);
+                border-radius: 50%;
+                opacity: 0;
+                transform: scale(0.3);
+                pointer-events: none;
+            }
+
+            #bot-cursor.clicked #bot-cursor-arrow {
+                transform: scale(0.82);
+            }
+
+            #bot-cursor.clicked #bot-cursor-ring {
+                animation: bot-cursor-ripple 0.4s ease-out;
+            }
+
+            #bot-cursor.hovering #bot-cursor-arrow {
+                transform: scale(1.12);
+            }
+
+            #bot-cursor.typing #bot-cursor-arrow {
+                opacity: 0.55;
+            }
+
+            @keyframes bot-cursor-ripple {
+                0%   { opacity: 0.9; transform: scale(0.3); }
+                100% { opacity: 0;   transform: scale(2.6); }
+            }
+
+            .bot-cursor-trail-dot {
+                position: fixed;
+                width: 5px;
+                height: 5px;
+                margin: -2.5px 0 0 -2.5px;
+                background: rgba(59, 130, 246, 0.55);
+                border-radius: 50%;
+                z-index: 2147483646;
+                pointer-events: none;
+                animation: bot-cursor-trail-fade 0.5s ease-out forwards;
+            }
+
+            @keyframes bot-cursor-trail-fade {
+                to { opacity: 0; transform: scale(0.4); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // --- 2. CURSOR ELEMENT ---
+        // A real pointer arrow: dark fill with a white outline so it stays
+        // legible on both light and dark pages, like an OS cursor.
+        const cursor = document.createElement('div');
+        cursor.id = 'bot-cursor';
+        cursor.innerHTML = `
+            <div id="bot-cursor-ring"></div>
+            <svg id="bot-cursor-arrow" width="22" height="30" viewBox="0 0 22 30"
+                 xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 2 L2 22 L7.2 17.2 L10.7 25.4 L14.4 23.8 L10.9 15.9 L17.6 15.9 Z"
+                      fill="#1a1a1a"
+                      stroke="#ffffff"
+                      stroke-width="1.7"
+                      stroke-linejoin="round"/>
+            </svg>
+        `;
+        document.body.appendChild(cursor);
+
+        // --- 3. POSITION TRACKING ---
+        window.playwrightCursor = {
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+            timestamp: Date.now(),
+            type: 'init'
+        };
+
+        let suppressMouseFollowing = false;
+        let suppressTimeout = null;
+        let animationFrame = null;
+        let settleCurrent = null;
+
+        function cancelAnimation() {
+            if (animationFrame !== null) {
+                cancelAnimationFrame(animationFrame);
+                animationFrame = null;
+            }
+            // A superseded glide must still settle its promise. Python awaits
+            // animateToPosition over the wire, so leaving it pending would hang
+            // the caller until Playwright's evaluate timeout.
+            if (settleCurrent) {
+                const settle = settleCurrent;
+                settleCurrent = null;
+                settle({
+                    x: window.playwrightCursor.x,
+                    y: window.playwrightCursor.y,
+                    cancelled: true
+                });
+            }
         }
 
-        #bot-cursor-dot {
-            width: 4px;
-            height: 4px;
-            background-color: white;
-            border-radius: 50%;
-            transition: transform 0.2s ease;
+        function releaseSuppression(delay) {
+            if (suppressTimeout) clearTimeout(suppressTimeout);
+            suppressTimeout = setTimeout(() => {
+                suppressMouseFollowing = false;
+                suppressTimeout = null;
+            }, delay);
         }
 
-        #bot-cursor.clicked {
-            transform: scale(1.4);
-            background-color: rgba(30, 64, 175, 0.6);
-        }
-        
-        #bot-cursor.clicked #bot-cursor-dot {
-            transform: scale(0.8);
-        }
-    `;
-    document.head.appendChild(style);
+        ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(eventType => {
+            document.addEventListener(eventType, (event) => {
+                // Always record where the real mouse is, even while suppressed.
+                window.playwrightCursor = {
+                    x: event.clientX,
+                    y: event.clientY,
+                    timestamp: Date.now(),
+                    type: event.type
+                };
 
-    // --- 2. CREATE CURSOR HTML ---
-    const cursor = document.createElement('div');
-    cursor.id = 'bot-cursor';
-    
-    const cursorDot = document.createElement('div');
-    cursorDot.id = 'bot-cursor-dot';
-    
-    cursor.appendChild(cursorDot);
-    document.body.appendChild(cursor);
+                if (suppressMouseFollowing) return;
 
-    // --- 3. CURSOR POSITION TRACKING (UPDATED WITH SUPPRESSION) ---
-    
-    // Initialize cursor position tracking
-    window.playwrightCursor = { 
-        x: window.innerWidth / 2, 
-        y: window.innerHeight / 2, 
-        timestamp: Date.now(),
-        type: 'init'
-    };
-
-    // Flag to temporarily disable mouse following during automation
-    let suppressMouseFollowing = false;
-    let suppressTimeout = null;
-
-    // Track all mouse events but respect suppression flag
-    ['mousemove', 'mousedown', 'mouseup', 'click', 'hover'].forEach(eventType => {
-        document.addEventListener(eventType, (event) => {
-            // Always update position tracking data
-            window.playwrightCursor = {
-                x: event.clientX,
-                y: event.clientY,
-                timestamp: Date.now(),
-                type: event.type
-            };
-            
-            // Only move visual cursor if not suppressed
-            if (!suppressMouseFollowing) {
                 updateBotCursorPosition(event.clientX, event.clientY);
-                
-                // Trigger appropriate visual feedback
                 if (event.type === 'click' || event.type === 'mousedown') {
                     document.dispatchEvent(new CustomEvent('bot-cursor-click'));
                 }
-            }
+            }, true);
         });
-    });
 
-    // --- 4. CURSOR TRAIL SYSTEM ---
-    const trailDots = [];
-    const maxTrailLength = 8;
+        // --- 4. TRAIL ---
+        const trailDots = [];
+        const maxTrailLength = 10;
+        let lastTrailAt = 0;
 
-    function createTrailDot(x, y) {
-        const dot = document.createElement('div');
-        dot.className = 'bot-cursor-trail-dot';
-        dot.style.left = `${x}px`;
-        dot.style.top = `${y}px`;
-        document.body.appendChild(dot);
-        trailDots.push(dot);
+        function createTrailDot(x, y) {
+            // Throttled: the animation loop runs at 60fps and one DOM node per
+            // frame is enough churn to visibly stutter the glide.
+            const now = performance.now();
+            if (now - lastTrailAt < TRAIL_INTERVAL_MS) return;
+            lastTrailAt = now;
 
-        if (trailDots.length > maxTrailLength) {
-            const oldDot = trailDots.shift();
-            oldDot.remove();
+            const dot = document.createElement('div');
+            dot.className = 'bot-cursor-trail-dot';
+            dot.style.left = `${x}px`;
+            dot.style.top = `${y}px`;
+            document.body.appendChild(dot);
+            trailDots.push(dot);
+
+            if (trailDots.length > maxTrailLength) {
+                trailDots.shift().remove();
+            }
         }
-    }
 
-    // --- 5. POSITION UPDATE FUNCTIONS ---
-    
-    function updateBotCursorPosition(x, y, createTrail = false) {
-        cursor.style.transform = `translate3d(${x - 12}px, ${y - 12}px, 0)`;
-        if (createTrail) {
-            createTrailDot(x, y);
+        // --- 5. POSITION UPDATE ---
+        function updateBotCursorPosition(x, y, createTrail = false) {
+            cursor.style.transform =
+                `translate3d(${x - HOTSPOT_X}px, ${y - HOTSPOT_Y}px, 0)`;
+            if (createTrail) createTrailDot(x, y);
         }
-    }
 
-    // --- 6. API FOR EXTERNAL ACCESS (UPDATED) ---
-    
-    // Expose functions for Playwright to use
-    window.botCursorAPI = {
-        // Get current cursor position
-        getCurrentPosition: () => {
-            return {
+        // easeInOutCubic: slow start, quick middle, gentle settle -- reads as a
+        // hand moving to a target rather than a linear machine sweep.
+        function easeInOutCubic(t) {
+            return t < 0.5
+                ? 4 * t * t * t
+                : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        // --- 6. PUBLIC API ---
+        window.botCursorAPI = {
+            getCurrentPosition: () => ({
                 x: window.playwrightCursor.x,
                 y: window.playwrightCursor.y,
                 timestamp: window.playwrightCursor.timestamp,
                 type: window.playwrightCursor.type
-            };
-        },
-        
-        // Set cursor position programmatically with suppression
-        setCursorPosition: (x, y, options = {}) => {
-            // Temporarily suppress mouse following
-            suppressMouseFollowing = true;
-            
-            // Clear any existing timeout
-            if (suppressTimeout) {
-                clearTimeout(suppressTimeout);
-            }
-            
-            // Update position tracking
-            window.playwrightCursor.x = x;
-            window.playwrightCursor.y = y;
-            window.playwrightCursor.timestamp = Date.now();
-            window.playwrightCursor.type = options.type || 'programmatic';
-            
-            // Move the visual cursor
-            updateBotCursorPosition(x, y, options.createTrail);
-            
-            // Re-enable mouse following after delay
-            const suppressDuration = options.suppressDuration || 150;
-            suppressTimeout = setTimeout(() => {
-                suppressMouseFollowing = false;
-                suppressTimeout = null;
-            }, suppressDuration);
-        },
-        
-        // Trigger click animation
-        triggerClick: () => {
-            cursor.classList.add('clicked');
-            setTimeout(() => {
+            }),
+
+            setCursorPosition: (x, y, options = {}) => {
+                cancelAnimation();
+                suppressMouseFollowing = true;
+
+                window.playwrightCursor.x = x;
+                window.playwrightCursor.y = y;
+                window.playwrightCursor.timestamp = Date.now();
+                window.playwrightCursor.type = options.type || 'programmatic';
+
+                updateBotCursorPosition(x, y, options.createTrail);
+                releaseSuppression(options.suppressDuration || 150);
+            },
+
+            triggerClick: () => {
                 cursor.classList.remove('clicked');
-            }, 200);
-            
-            document.dispatchEvent(new CustomEvent('bot-cursor-click'));
-        },
-        
-        // Set cursor state
-        setCursorState: (state) => {
-            cursor.classList.remove('typing', 'hovering', 'clicked');
-            if (state && state !== 'normal') {
-                cursor.classList.add(state);
-            }
-        },
-        
-        // Smooth move animation with suppression
-        animateToPosition: (targetX, targetY, duration = 500, options = {}) => {
-            // Suppress mouse following during entire animation
-            suppressMouseFollowing = true;
-            
-            // Clear any existing timeout
-            if (suppressTimeout) {
-                clearTimeout(suppressTimeout);
-            }
-            
-            const currentPos = window.playwrightCursor;
-            const startX = currentPos.x;
-            const startY = currentPos.y;
-            const startTime = Date.now();
-            
-            return new Promise((resolve) => {
-                function animate() {
-                    const elapsed = Date.now() - startTime;
-                    const progress = Math.min(elapsed / duration, 1);
-                    
-                    const easeProgress = options.easing === 'linear' ? progress : 1 - Math.pow(1 - progress, 3);
-                    
-                    const currentX = startX + (targetX - startX) * easeProgress;
-                    const currentY = startY + (targetY - startY) * easeProgress;
-                    
-                    // Update position without triggering additional suppression
-                    window.playwrightCursor.x = currentX;
-                    window.playwrightCursor.y = currentY;
-                    window.playwrightCursor.timestamp = Date.now();
-                    window.playwrightCursor.type = 'animation';
-                    
-                    updateBotCursorPosition(currentX, currentY, options.showTrail);
-                    
-                    if (progress < 1) {
-                        requestAnimationFrame(animate);
-                    } else {
-                        // Re-enable mouse following after animation plus buffer
-                        const bufferTime = options.suppressDuration || 200;
-                        suppressTimeout = setTimeout(() => {
-                            suppressMouseFollowing = false;
-                            suppressTimeout = null;
-                        }, bufferTime);
-                        
-                        resolve({ x: targetX, y: targetY });
-                    }
-                }
-                
-                animate();
-            });
-        },
+                // Force reflow so the ripple restarts on repeated clicks.
+                void cursor.offsetWidth;
+                cursor.classList.add('clicked');
+                setTimeout(() => cursor.classList.remove('clicked'), 400);
+            },
 
-        // Manual suppression control (for complex operations)
-        suppressMouseFollowing: (suppress, duration = 0) => {
-            suppressMouseFollowing = suppress;
-            
-            if (suppressTimeout) {
-                clearTimeout(suppressTimeout);
-                suppressTimeout = null;
-            }
-            
-            if (suppress && duration > 0) {
-                suppressTimeout = setTimeout(() => {
-                    suppressMouseFollowing = false;
+            setCursorState: (state) => {
+                cursor.classList.remove('typing', 'hovering', 'clicked');
+                if (state && state !== 'normal') cursor.classList.add(state);
+            },
+
+            // Smooth eased glide from the current position to the target.
+            animateToPosition: (targetX, targetY, duration = 500, options = {}) => {
+                // A second animate() call while one is in flight used to leave
+                // both loops writing transform on alternate frames.
+                cancelAnimation();
+                suppressMouseFollowing = true;
+                if (suppressTimeout) {
+                    clearTimeout(suppressTimeout);
                     suppressTimeout = null;
-                }, duration);
-            }
-        },
-
-        // Get suppression state
-        isMouseFollowingSuppressed: () => {
-            return suppressMouseFollowing;
-        },
-
-        // Hide/Show cursor
-        setVisibility: (visible) => {
-            cursor.style.display = visible ? 'flex' : 'none';
-        },
-
-        // Clear trail dots
-        clearTrail: () => {
-            trailDots.forEach(dot => {
-                if (dot.parentElement) {
-                    dot.remove();
                 }
-            });
-            trailDots.length = 0;
-        }
-    };
 
-    // --- 7. EVENT LISTENERS ---
-    
-    // Listen for custom event to move the cursor
-    document.addEventListener('bot-cursor-move', (e) => {
-        const { x, y } = e.detail;
-        // Use translate3d for hardware acceleration
-        cursor.style.transform = `translate3d(${x - 12}px, ${y - 12}px, 0)`;
-    });
+                const startX = window.playwrightCursor.x;
+                const startY = window.playwrightCursor.y;
+                const startTime = performance.now();
+                const linear = options.easing === 'linear';
 
-    // Listen for custom event for click feedback
-    document.addEventListener('bot-cursor-click', () => {
-        cursor.classList.add('clicked');
-        setTimeout(() => {
-            cursor.classList.remove('clicked');
-        }, 200); // Duration of the click animation
-    });
+                return new Promise((resolve) => {
+                    settleCurrent = resolve;
 
-    // --- 8. REAL-TIME POSITION BROADCASTING ---
-    
-    function broadcastPosition(x, y, type = 'update') {
-        // This function would typically send data back to the Python side
-        // For now, we'll just log it to the console.
-        console.log(`Bot Cursor Position: x=${x}, y=${y}, type=${type}`);
+                    function step(now) {
+                        const progress = duration > 0
+                            ? Math.min((now - startTime) / duration, 1)
+                            : 1;
+                        const eased = linear ? progress : easeInOutCubic(progress);
+
+                        const currentX = startX + (targetX - startX) * eased;
+                        const currentY = startY + (targetY - startY) * eased;
+
+                        window.playwrightCursor.x = currentX;
+                        window.playwrightCursor.y = currentY;
+                        window.playwrightCursor.timestamp = Date.now();
+                        window.playwrightCursor.type = 'animation';
+
+                        updateBotCursorPosition(currentX, currentY, options.showTrail);
+
+                        if (progress < 1) {
+                            animationFrame = requestAnimationFrame(step);
+                        } else {
+                            animationFrame = null;
+                            settleCurrent = null;
+                            releaseSuppression(options.suppressDuration || 200);
+                            resolve({ x: targetX, y: targetY });
+                        }
+                    }
+
+                    animationFrame = requestAnimationFrame(step);
+                });
+            },
+
+            suppressMouseFollowing: (suppress, duration = 0) => {
+                suppressMouseFollowing = suppress;
+                if (suppressTimeout) {
+                    clearTimeout(suppressTimeout);
+                    suppressTimeout = null;
+                }
+                if (suppress && duration > 0) releaseSuppression(duration);
+            },
+
+            isMouseFollowingSuppressed: () => suppressMouseFollowing,
+
+            setVisibility: (visible) => {
+                cursor.style.display = visible ? 'block' : 'none';
+            },
+
+            clearTrail: () => {
+                trailDots.forEach(dot => dot.remove());
+                trailDots.length = 0;
+            }
+        };
+
+        // --- 7. EVENT LISTENERS ---
+        document.addEventListener('bot-cursor-move', (e) => {
+            const { x, y } = e.detail;
+            updateBotCursorPosition(x, y);
+        });
+
+        document.addEventListener('bot-cursor-click', () => {
+            window.botCursorAPI.triggerClick();
+        });
+
+        // --- 8. INITIALIZATION ---
+        window.botCursorAPI.setCursorPosition(
+            window.innerWidth / 2,
+            window.innerHeight / 2,
+            { type: 'init', suppressDuration: 100 }
+        );
     }
 
-    // Enhanced position tracking with broadcasting (updated to use new setCursorPosition)
-    const originalSetCursorPosition = window.botCursorAPI.setCursorPosition;
-    window.botCursorAPI.setCursorPosition = function(x, y, options = {}) {
-        originalSetCursorPosition(x, y, options);
-        broadcastPosition(x, y, options.type || 'programmatic');
-    };
-
-    // --- 9. INITIALIZATION ---
-    
-    // Initialize cursor at center of screen
-    const centerX = window.innerWidth / 2;
-    const centerY = window.innerHeight / 2;
-    window.botCursorAPI.setCursorPosition(centerX, centerY, { 
-        type: 'init', 
-        suppressDuration: 100 
-    });
-
-    console.log('Bot cursor initialized with suppression-based tracking API');
-});
+    // add_init_script() runs before the DOM exists, page.evaluate() runs long
+    // after DOMContentLoaded has already fired. The old code only listened for
+    // the event, so the evaluate() injection never built a cursor at all.
+    if (document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', init, { once: true });
+    } else {
+        init();
+    }
+})();

@@ -1,22 +1,37 @@
 import asyncio
 import json
+import math
 from typing import Dict, Any, Optional, Tuple, List
 from playwright.async_api import Page, ElementHandle
 import logging
 
 logger = logging.getLogger(__name__)
 
+# Glide timing. A fixed duration makes short hops crawl and long sweeps look
+# rushed, so the travel time scales with distance between these bounds.
+MIN_MOVE_MS = 220
+MAX_MOVE_MS = 900
+PIXELS_PER_MS = 1.6
+
+
 class PlaywrightBotCursor:
     """
     Integration class for controlling the bot cursor visual indicator
     from Playwright automation scripts with add_init_script() injection.
     """
-    
+
     def __init__(self, page: Page):
         self.page = page
         self.is_initialized = False
         self.last_known_position = {"x": 0, "y": 0}
         self._script_injected = False
+
+    def _duration_for(self, x: float, y: float) -> int:
+        """Travel time for a glide to (x, y), scaled by how far it has to go."""
+        dx = x - self.last_known_position.get("x", 0)
+        dy = y - self.last_known_position.get("y", 0)
+        distance = math.hypot(dx, dy)
+        return int(max(MIN_MOVE_MS, min(MAX_MOVE_MS, distance / PIXELS_PER_MS)))
 
     async def initialize(self):
         """Initialize the cursor system"""
@@ -71,12 +86,19 @@ class PlaywrightBotCursor:
         except Exception as e:
             logger.error(f"Error setting cursor position: {e}")
     
-    async def animate_to_position(self, x: float, y: float, duration: int = 500, 
-                                show_trail: bool = True, suppress_duration: int = 200):
-        """Animate cursor to position with suppression"""
+    async def animate_to_position(self, x: float, y: float, duration: int | None = None,
+                                show_trail: bool = False, suppress_duration: int = 200):
+        """Glide the cursor to a position with eased motion.
+
+        `duration` defaults to a distance-scaled travel time so the cursor
+        visibly moves from where it is to the target instead of jumping.
+        """
         if not self.is_initialized:
             await self.initialize()
-            
+
+        if duration is None:
+            duration = self._duration_for(x, y)
+
         try:
             self.last_known_position = {"x": x, "y": y}
             result = await self.page.evaluate("""
@@ -196,10 +218,10 @@ class PlaywrightBotCursor:
         try:
             # Move to position (with or without animation)
             if animate:
-                await self.animate_to_position(x, y, duration=300, show_trail=True)
+                await self.animate_to_position(x, y)
             else:
                 await self.set_position(x, y)
-            
+
             # Trigger visual click feedback
             await self.trigger_click_feedback()
             
@@ -214,15 +236,15 @@ class PlaywrightBotCursor:
     async def set_visibility(self, visible: bool) -> bool:
         """Show or hide the cursor"""
         if not self.is_initialized:
-            return False
-            
+            await self.initialize()
+
         try:
-            await self.page.evaluate(f"""
-                (visible) => {{
-                    if (window.botCursorAPI) {{
+            await self.page.evaluate("""
+                (visible) => {
+                    if (window.botCursorAPI) {
                         window.botCursorAPI.setVisibility(visible);
-                    }}
-                }}
+                    }
+                }
             """, visible)
             return True
         except Exception as e:
@@ -248,7 +270,7 @@ class PlaywrightBotCursor:
             
             # Move cursor
             if animate:
-                return await self.animate_to_position(center_x, center_y, show_trail=True)
+                return await self.animate_to_position(center_x, center_y)
             else:
                 await self.set_position(center_x, center_y)
                 return {"x": center_x, "y": center_y}

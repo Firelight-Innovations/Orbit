@@ -1,0 +1,239 @@
+/*
+ * Assistant sidebar theme — modelled on Simplicity (github.com/Blueturboguy07/Simplicity),
+ * a Perplexity-style answer engine. Scoped to `.orbit-assistant` so nothing here
+ * leaks into the rest of the browser chrome.
+ *
+ * Palette is Simplicity's dark scale (GitHub dark-dimmed):
+ *   50 #0d1117 (page)  100 #161b22 (surface)  200 #21262d (border)  300 #30363d (border-strong)
+ * Text is an opacity ladder on white rather than named tokens.
+ * Teal is reserved for agent/research state; #24a0ed for actions.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+
+.orbit-assistant {
+  --oa-50: #0d1117;
+  --oa-100: #161b22;
+  --oa-200: #21262d;
+  --oa-300: #30363d;
+  --oa-accent: #24a0ed;
+  --oa-research: #14b8a6;
+}
+
+/* Simplicity's serif/sans split: sans everywhere, serif for display headings only. */
+.orbit-serif {
+  font-family: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+}
+
+/*
+ * Thin 6px scrollbar. Overrides the chunky global browser-chrome scrollbar via
+ * class specificity (see styles/global.css).
+ */
+.orbit-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.orbit-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border: none;
+}
+
+.orbit-scroll::-webkit-scrollbar-thumb {
+  background: #21262d;
+  border: none;
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+.orbit-scroll::-webkit-scrollbar-thumb:hover {
+  background: #30363d;
+  border: none;
+  box-shadow: none;
+}
+
+.orbit-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* New turns and steps ease in rather than popping. */
+@keyframes orbit-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.orbit-rise {
+  animation: orbit-rise 220ms ease-out both;
+}
+
+/* Blinking caret trailing the streaming answer. */
+@keyframes orbit-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+.orbit-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.7);
+  animation: orbit-blink 1s steps(1, end) infinite;
+}
+
+/* The running-status line in a collapsed step card breathes. */
+@keyframes orbit-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.orbit-breathe {
+  animation: orbit-breathe 1.8s ease-in-out infinite;
+}
+
+/* Expand/collapse for the step timeline — no framer-motion dependency needed. */
+@keyframes orbit-unfurl {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.orbit-unfurl {
+  animation: orbit-unfurl 200ms ease-out both;
+}
+
+/* Answer typography. Stands in for @tailwindcss/typography, which isn't installed. */
+.orbit-prose {
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.88);
+  word-break: break-word;
+}
+
+.orbit-prose > * + * {
+  margin-top: 0.75em;
+}
+
+.orbit-prose h1,
+.orbit-prose h2 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.orbit-prose h1 {
+  font-size: 1.5rem;
+  margin-top: 1.2em;
+}
+
+.orbit-prose h2 {
+  font-size: 1.25rem;
+  margin-top: 1.2em;
+}
+
+.orbit-prose h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  margin-top: 1em;
+}
+
+.orbit-prose strong {
+  font-weight: 600;
+  color: #fff;
+}
+
+.orbit-prose em {
+  font-style: italic;
+}
+
+.orbit-prose a {
+  color: var(--oa-accent);
+  text-decoration: none;
+}
+
+.orbit-prose a:hover {
+  text-decoration: underline;
+}
+
+.orbit-prose ul,
+.orbit-prose ol {
+  padding-left: 1.25rem;
+}
+
+.orbit-prose ul {
+  list-style: disc;
+}
+
+.orbit-prose ol {
+  list-style: decimal;
+}
+
+.orbit-prose li + li {
+  margin-top: 0.3em;
+}
+
+.orbit-prose li::marker {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.orbit-prose blockquote {
+  padding-left: 0.75rem;
+  border-left: 2px solid #30363d;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.orbit-prose hr {
+  border: 0;
+  border-top: 1px solid #21262d;
+}
+
+.orbit-prose code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: #21262d;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.orbit-prose pre {
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #21262d;
+  background: #0d1117;
+  overflow-x: auto;
+}
+
+.orbit-prose pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.6;
+}
