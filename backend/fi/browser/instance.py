@@ -121,8 +121,21 @@ class BrowserInstance:
                         # all in this context). resolve_active_page() refines this
                         # per-request from the foreground tab URL.
                         web_pages = [p for p in pages if not self._is_internal_url(p.url)]
-                        self.page = web_pages[0] if web_pages else pages[0]
-                        logger.info(f"Connected to existing page: {self.page.url}")
+                        # Deliberately leave self.page as None when only Orbit's
+                        # own renderers are open. Falling back to pages[0] here
+                        # handed the agent the assistant sidebar, and it went on
+                        # to type into its own chat box and click its own
+                        # buttons. Tools refuse without a page, and navigate_to
+                        # opens a real tab through the Orbit bridge, so "no page
+                        # yet" is a recoverable state rather than a dead end.
+                        self.page = web_pages[0] if web_pages else None
+                        if self.page is not None:
+                            logger.info(f"Connected to existing page: {self.page.url}")
+                        else:
+                            logger.info(
+                                "No web page open (only Orbit's own views); "
+                                "agent must navigate before it can act."
+                            )
                     else:
                         # No pages exist, create one
                         self.page = await self.context.new_page()
@@ -133,27 +146,33 @@ class BrowserInstance:
                     self.page = await self.context.new_page()
                     logger.info("Created new context and page")
                 
-                # Inject scripts to the current page
-                await self._inject_scripts_to_page(self.page)
+                # All of this is per-page setup, so it only applies once there is
+                # a real page. _on_new_page runs the same steps for the tab the
+                # agent opens later.
+                if self.page is not None:
+                    await self._inject_scripts_to_page(self.page)
 
-                # Apply stealth measures
-                if HAS_STEALTH and stealth_async:
-                    try:
-                        await stealth_async(self.page)
-                    except Exception as e:
-                        logger.warning(f"Could not apply stealth measures: {e}")
+                    # Apply stealth measures
+                    if HAS_STEALTH and stealth_async:
+                        try:
+                            await stealth_async(self.page)
+                        except Exception as e:
+                            logger.warning(f"Could not apply stealth measures: {e}")
 
-                # Initialize cursor controller
-                if HAS_CURSOR and PlaywrightBotCursor:
-                    self.cursor = PlaywrightBotCursor(self.page)
+                    # Initialize cursor controller
+                    if HAS_CURSOR and PlaywrightBotCursor:
+                        self.cursor = PlaywrightBotCursor(self.page)
 
-                # Repoint self.page if this tab closes
-                self.page.on("close", self._on_page_close)
+                    # Repoint self.page if this tab closes
+                    self.page.on("close", self._on_page_close)
 
                 # Listen for new pages (tabs) in the context
                 self.context.on("page", self._on_new_page)
-                
-                logger.info(f"CDP connection established. Active page: {self.page.url}")
+
+                logger.info(
+                    "CDP connection established. Active page: "
+                    f"{self.page.url if self.page is not None else 'none yet'}"
+                )
                 return self.page
                 
             except Exception as e:

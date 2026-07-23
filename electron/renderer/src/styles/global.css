@@ -1,61 +1,109 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+/*
+ * Orbit design tokens.
+ *
+ * Modelled on Simplicity (github.com/Blueturboguy07/Simplicity), the
+ * Perplexity-style answer engine whose search Orbit embeds. Simplicity's
+ * tailwind.config.ts defines a four-step GitHub dark-dimmed scale:
+ *
+ *   dark-50  #0d1117  page / base
+ *   dark-100 #161b22  raised surface (its sidebar + composer card)
+ *   dark-200 #21262d  hairline border, subtle fill, hover
+ *   dark-300 #30363d  border-strong / focus-within
+ *
+ * Text is an opacity ladder on white rather than named greys, and the action
+ * accent is a sky blue. Orbit's assistant sidebar already adopted this scale
+ * (see components/Assistant/assistant.css, which pins the same four steps plus
+ * #24a0ed for actions and #14b8a6 for agent/research state) — the tokens below
+ * make the rest of the browser chrome agree with it instead of running the old
+ * purple (#8b5cf6) theme in parallel.
+ *
+ * Typography follows Simplicity's split: Montserrat everywhere, Instrument
+ * Serif for display headings only.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Montserrat:wght@300;400;500;600;700&display=swap');
 
 @import "tailwindcss";
 
 @layer base {
   :root {
-    /* Dark theme - inspired by modern IDEs */
-    --bg-primary: #0a0a0b;
-    --bg-secondary: #111113;
-    --bg-tertiary: #18181b;
-    --bg-elevated: #1f1f23;
-    --bg-hover: #27272a;
-    
-    --border-subtle: #27272a;
-    --border-default: #3f3f46;
-    
-    --text-primary: #fafafa;
-    --text-secondary: #a1a1aa;
-    --text-muted: #71717a;
-    
-    --accent-primary: #8b5cf6;
-    --accent-secondary: #a78bfa;
-    --accent-glow: rgba(139, 92, 246, 0.3);
-    
-    --success: #22c55e;
-    --warning: #f59e0b;
-    --error: #ef4444;
-    
-    --radius-sm: 4px;
+    /* ---- Simplicity dark scale ---- */
+    --surface-base: #0d1117;
+    --surface-raised: #161b22;
+    --surface-subtle: #21262d;
+    --surface-strong: #30363d;
+
+    /* Interaction states, named by role. All resolve to the scale above. */
+    --bg-primary: var(--surface-base);
+    --bg-tertiary: var(--surface-base);
+    --bg-hover: var(--surface-subtle);
+    --bg-active: var(--surface-strong);
+
+    /* Hairline at rest, brightening on focus — Simplicity's focus-within idiom. */
+    --border-subtle: var(--surface-subtle);
+    --border-default: var(--surface-strong);
+
+    /* Text is an opacity ladder on white, not a grey palette. */
+    --text-primary: rgba(255, 255, 255, 0.92);
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --text-muted: rgba(255, 255, 255, 0.38);
+
+    /* Actions. */
+    --accent-primary: #24a0ed;
+    --accent-hover: #1b8fd6;
+    --accent-secondary: #6cc0f5;
+    --accent-soft: rgba(36, 160, 237, 0.12);
+    --accent-glow: rgba(36, 160, 237, 0.25);
+
+    /* Reserved for agent / Fi research state, matching assistant.css. */
+    --research: #14b8a6;
+    --research-soft: rgba(20, 184, 166, 0.1);
+
+    --success: #3fb950;
+    --warning: #d29922;
+    --error: #f85149;
+    --error-soft: rgba(248, 81, 73, 0.12);
+
+    /* Tailwind's own steps, which is what Simplicity's chrome is built from. */
+    --radius-sm: 6px;
     --radius-md: 8px;
     --radius-lg: 12px;
-    
-    --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    --radius-xl: 16px;
+    --radius-full: 9999px;
+
+    --font-sans: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-    
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.45);
+
     --transition-fast: 120ms ease;
     --transition-normal: 200ms ease;
 
-    /* ShadCN CSS Variables - Dark theme */
-    --background: 0 0% 4%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 7%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 262 83% 58%;
+    /* ShadCN CSS variables, expressed as the same scale in HSL. */
+    --background: 216 28% 7%;      /* #0d1117 */
+    --foreground: 213 31% 91%;
+    --card: 215 21% 11%;           /* #161b22 */
+    --card-foreground: 213 31% 91%;
+    --popover: 215 21% 11%;        /* #161b22 */
+    --popover-foreground: 213 31% 91%;
+    --primary: 203 85% 54%;        /* #24a0ed */
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 64%;
-    --accent: 262 83% 58%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 262 83% 58%;
+    --secondary: 215 15% 15%;      /* #21262d */
+    --secondary-foreground: 213 31% 91%;
+    --muted: 215 15% 15%;          /* #21262d */
+    --muted-foreground: 213 12% 62%;
+    /* ShadCN's --accent is the *hover surface*, not the brand hue. It was
+       previously pinned to the brand colour, which made every ghost/outline
+       button flood solid on hover; dark-200 is what Simplicity fills with. */
+    --accent: 215 15% 15%;         /* #21262d */
+    --accent-foreground: 213 31% 91%;
+    --destructive: 3 92% 63%;      /* #f85149 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 15% 15%;         /* #21262d */
+    --input: 215 15% 15%;          /* #21262d */
+    --ring: 203 85% 54%;           /* #24a0ed */
     --radius: 0.5rem;
   }
 }
@@ -90,7 +138,7 @@
     /* Default border color using the theme token; avoids missing utility errors */
     border-color: hsl(var(--border));
   }
-  
+
   body {
     @apply bg-background text-foreground;
   }
@@ -113,6 +161,13 @@ body {
   background: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Simplicity uses a serif only for display headings; body stays on the sans. */
+.orbit-serif {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
 .app {
@@ -149,9 +204,11 @@ body {
 }
 
 .empty-state h1 {
-  font-size: 24px;
-  font-weight: 600;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 28px;
   color: var(--text-secondary);
+  letter-spacing: -0.01em;
 }
 
 .empty-state p {
@@ -168,7 +225,6 @@ body {
   gap: 24px;
   /* Solid background for internal pages */
   background: var(--bg-primary);
-  background-image: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.08) 0%, transparent 60%);
   animation: fadeIn 0.5s ease-out;
 }
 
@@ -201,24 +257,19 @@ body {
   width: 160px;
   height: 160px;
   object-fit: contain;
-  filter: drop-shadow(0 0 40px rgba(139, 92, 246, 0.4));
-  transition: transform var(--transition-normal), filter var(--transition-normal);
+  transition: transform var(--transition-normal);
 }
 
 .welcome-logo:hover img {
   transform: scale(1.05);
-  filter: drop-shadow(0 0 60px rgba(139, 92, 246, 0.6));
 }
 
 .welcome-title {
-  font-size: 32px;
-  font-weight: 700;
+  font-family: var(--font-serif);
+  font-size: 40px;
+  font-weight: 400;
   color: var(--text-primary);
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .welcome-subtitle {
@@ -227,40 +278,40 @@ body {
   font-weight: 400;
 }
 
-/* Orbit Custom Scrollbar */
+/*
+ * Scrollbars. Simplicity's globals.css uses a 6px rail with a dark-200 thumb
+ * that lifts to dark-300 on hover; no track, no glow.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-subtle) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 15px;
-  height: 15px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(17, 17, 19, 0.6);
-  border-left: 1px solid rgba(39, 39, 42, 0.4);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #52525b 0%, #3f3f46 100%);
-  border-radius: 6px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  transition: background 0.2s ease;
+  background: var(--surface-subtle);
+  border-radius: 3px;
+  transition: background var(--transition-normal);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
+  background: var(--surface-strong);
 }
 
 ::-webkit-scrollbar-thumb:active {
-  background: linear-gradient(180deg, #a78bfa 0%, #8b5cf6 100%);
-  border: 2px solid transparent;
-  background-clip: padding-box;
+  background: var(--surface-strong);
 }
 
 ::-webkit-scrollbar-corner {
-  background: rgba(17, 17, 19, 0.6);
+  background: transparent;
 }
 
 /* Selection */
@@ -299,7 +350,7 @@ body {
 .browser-loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid var(--border-default);
+  border: 2px solid var(--border-default);
   border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;

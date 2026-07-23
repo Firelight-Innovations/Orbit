@@ -132,10 +132,11 @@ export function BookmarksManagerPage({ onNavigate }: BookmarksManagerPageProps) 
 
   return (
     <div className="flex h-full w-full bg-background">
-      {/* Left Sidebar - Folder Tree */}
-      <div className="w-64 border-r border-border flex flex-col">
+      {/* Left Sidebar - Folder Tree. Raised tone against the base-tone pane,
+          the same figure/ground split Simplicity uses for its rail. */}
+      <div className="flex w-64 flex-col border-r border-border bg-[var(--surface-raised)]">
         <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-semibold">Bookmarks</h2>
+          <h2 className="orbit-serif text-xl">Bookmarks</h2>
         </div>
         <div className="flex-1 overflow-y-auto">
           <FolderTree
@@ -196,7 +197,7 @@ export function BookmarksManagerPage({ onNavigate }: BookmarksManagerPageProps) 
                 }
               }}
               placeholder="Search bookmarks..."
-              className="w-full pl-10 pr-4 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-full border border-input bg-[var(--surface-raised)] py-2 pl-10 pr-4 text-sm transition-colors focus:border-[var(--accent-primary)] focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
         </div>

@@ -114,7 +114,7 @@ export function BookmarksList({
                 variant="ghost"
                 size="sm"
                 onClick={() => onDelete(bookmark)}
-                className="text-red-600 hover:text-red-700"
+                className="text-[var(--error)] hover:bg-[var(--error-soft)] hover:text-[var(--error)]"
               >
                 Delete
               </Button>

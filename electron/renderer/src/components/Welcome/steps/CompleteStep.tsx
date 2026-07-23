@@ -57,7 +57,7 @@ export function CompleteStep({ profileId, onFinish }: CompleteStepProps) {
     delay: Math.random() * 0.5,
     duration: 2 + Math.random() * 2,
     size: 4 + Math.random() * 8,
-    color: ['#8b5cf6', '#a78bfa', '#c4b5fd', '#22c55e', '#3b82f6'][Math.floor(Math.random() * 5)]
+    color: ['#24a0ed', '#6cc0f5', '#14b8a6', '#3fb950', '#30363d'][Math.floor(Math.random() * 5)]
   }))
 
   return (
@@ -107,7 +107,7 @@ export function CompleteStep({ profileId, onFinish }: CompleteStepProps) {
           className="relative mb-8"
         >
         <motion.div
-          className="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-600"
+          className="flex h-28 w-28 items-center justify-center rounded-full bg-[var(--success)]"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{
@@ -132,7 +132,7 @@ export function CompleteStep({ profileId, onFinish }: CompleteStepProps) {
             delay: 0.5
           }}
         >
-          <PartyPopper className="h-10 w-10 text-yellow-400" />
+          <PartyPopper className="h-10 w-10 text-[var(--warning)]" />
         </motion.div>
 
         {/* Glow effect */}
@@ -140,9 +140,9 @@ export function CompleteStep({ profileId, onFinish }: CompleteStepProps) {
           className="absolute inset-0 rounded-full"
           animate={{
             boxShadow: [
-              '0 0 0 0 rgba(34, 197, 94, 0)',
-              '0 0 30px 10px rgba(34, 197, 94, 0.3)',
-              '0 0 0 0 rgba(34, 197, 94, 0)'
+              '0 0 0 0 rgba(63, 185, 80, 0)',
+              '0 0 30px 10px rgba(63, 185, 80, 0.25)',
+              '0 0 0 0 rgba(63, 185, 80, 0)'
             ]
           }}
           transition={{
@@ -156,9 +156,9 @@ export function CompleteStep({ profileId, onFinish }: CompleteStepProps) {
         {/* Title */}
         <motion.h2
           variants={itemVariants}
-          className="mb-3 text-4xl font-bold"
+          className="orbit-serif mb-3 text-5xl text-white"
         >
-          <span className="bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 bg-clip-text text-transparent">
+          <span>
             You're All Set!
           </span>
         </motion.h2>
@@ -166,7 +166,7 @@ export function CompleteStep({ profileId, onFinish }: CompleteStepProps) {
         {/* Subtitle */}
         <motion.p
           variants={itemVariants}
-          className="mb-8 max-w-md text-lg text-zinc-400"
+          className="mb-8 max-w-md text-lg text-white/60"
         >
           {profile ? (
             <>
@@ -185,7 +185,7 @@ export function CompleteStep({ profileId, onFinish }: CompleteStepProps) {
           <Button
             size="lg"
             onClick={onFinish}
-            className="group relative overflow-hidden bg-gradient-to-r from-purple-600 to-purple-500 px-10 py-6 text-lg font-semibold text-white"
+            className="group relative overflow-hidden bg-[var(--accent-primary)] px-10 py-6 text-lg font-medium text-white transition-colors hover:bg-[var(--accent-hover)]"
           >
             <span className="flex items-center gap-3">
               <Rocket className="h-5 w-5" />
@@ -197,9 +197,9 @@ export function CompleteStep({ profileId, onFinish }: CompleteStepProps) {
         {/* Keyboard hint */}
         <motion.p
           variants={itemVariants}
-          className="mt-6 text-sm text-zinc-500"
+          className="mt-6 text-sm text-white/40"
         >
-          Press <kbd className="rounded bg-zinc-800 px-2 py-0.5 text-xs">Enter</kbd> to launch
+          Press <kbd className="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-2 py-0.5 font-mono text-xs text-white/60">Enter</kbd> to launch
         </motion.p>
       </motion.div>
     </>

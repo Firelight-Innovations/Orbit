@@ -148,17 +148,12 @@ export const AutocompleteDropdown = forwardRef<AutocompleteDropdownRef, Autocomp
       return searchActions.length + historySuggestions.length + localIndex
     }
 
-    // Fi icon for suggestions
+    // Fi icon for suggestions. Flat teal rather than the old purple/cyan
+    // gradient: teal is the reserved agent/research hue across Orbit.
     const getFiIcon = () => (
       <svg viewBox="0 0 16 16" fill="none" className="suggestion-icon fi-icon">
-        <circle cx="8" cy="8" r="6" stroke="url(#fiGradient)" strokeWidth="1.5" />
-        <path d="M5.5 8h5M8 5.5v5" stroke="url(#fiGradient)" strokeWidth="1.5" strokeLinecap="round" />
-        <defs>
-          <linearGradient id="fiGradient" x1="2" y1="2" x2="14" y2="14">
-            <stop stopColor="#8b5cf6" />
-            <stop offset="1" stopColor="#06b6d4" />
-          </linearGradient>
-        </defs>
+        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M5.5 8h5M8 5.5v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     )
 

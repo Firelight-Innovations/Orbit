@@ -55,4 +55,3 @@ htmlcov/
 # Simplicity is pulled fresh from its own repo rather than copied into ours,
 # so nothing from it is ever committed here.
 vendor/
-

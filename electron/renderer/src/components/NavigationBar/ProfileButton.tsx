@@ -94,30 +94,30 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <button
-          className="group flex items-center gap-2 rounded-full p-1 pr-2 transition-all hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+          className="group flex items-center gap-2 rounded-full p-1 pr-2 transition-colors hover:bg-[var(--surface-subtle)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
           aria-label="Profile menu"
         >
           <Avatar 
             className="h-7 w-7 ring-2 transition-all"
             style={{ 
-              '--tw-ring-color': activeProfile?.color || '#8b5cf6' 
+              '--tw-ring-color': activeProfile?.color || '#24a0ed' 
             } as React.CSSProperties}
           >
             <AvatarImage src={activeProfile?.avatar} alt={activeProfile?.name} />
             <AvatarFallback 
               className="text-xs font-medium text-white"
-              style={{ backgroundColor: activeProfile?.color || '#8b5cf6' }}
+              style={{ backgroundColor: activeProfile?.color || '#24a0ed' }}
             >
               {activeProfile ? getInitials(activeProfile.name) : '?'}
             </AvatarFallback>
           </Avatar>
-          <ChevronDown className="h-3 w-3 text-zinc-400 transition-transform group-data-[state=open]:rotate-180" />
+          <ChevronDown className="h-3 w-3 text-white/40 transition-transform group-data-[state=open]:rotate-180" />
         </button>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent 
         align="end" 
-        className="w-80 border-zinc-800 bg-zinc-900 p-0"
+        className="w-80 p-0"
         sideOffset={8}
       >
         {/* Current profile header - Chrome style */}
@@ -125,7 +125,7 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
           <>
             <div className="flex flex-col items-center px-6 py-5 text-center">
               <Avatar 
-                className="mb-3 h-16 w-16 ring-[3px] ring-offset-2 ring-offset-zinc-900"
+                className="mb-3 h-16 w-16 ring-2 ring-offset-2 ring-offset-[var(--surface-raised)]"
                 style={{ 
                   '--tw-ring-color': activeProfile.color 
                 } as React.CSSProperties}
@@ -141,17 +141,17 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
               <div className="w-full">
                 <p className="truncate text-base font-medium text-white">{activeProfile.name}</p>
                 {activeProfile.isImported && activeProfile.chromeProfileName ? (
-                  <p className="mt-0.5 truncate text-sm text-zinc-400">
+                  <p className="mt-0.5 truncate text-sm text-white/60">
                     {activeProfile.chromeProfileName}
                   </p>
                 ) : (
-                  <p className="mt-0.5 truncate text-sm text-zinc-400">
+                  <p className="mt-0.5 truncate text-sm text-white/60">
                     {activeProfile.name.toLowerCase().replace(/\s+/g, '.')}@orbit.local
                   </p>
                 )}
               </div>
             </div>
-            <DropdownMenuSeparator className="bg-zinc-800" />
+            <DropdownMenuSeparator className="bg-[var(--border-subtle)]" />
           </>
         )}
 
@@ -159,7 +159,7 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
         {profiles.length > 1 && (
           <>
             <div className="px-3 py-2">
-              <p className="px-3 py-1.5 text-xs font-medium text-zinc-500">
+              <p className="px-3 py-1.5 text-xs font-medium uppercase tracking-wider text-white/40">
                 Other Orbit profiles
               </p>
               <div className="flex flex-col gap-0.5">
@@ -169,7 +169,7 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
                     <button
                       key={profile.id}
                       onClick={() => handleSwitchProfile(profile.id)}
-                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-zinc-800"
+                      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-[var(--surface-subtle)]"
                     >
                       <Avatar 
                         className="h-8 w-8 ring-2"
@@ -186,7 +186,7 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 overflow-hidden">
-                        <p className="truncate text-sm font-medium text-zinc-200">
+                        <p className="truncate text-sm font-medium text-white/85">
                           {profile.name}
                         </p>
                       </div>
@@ -194,7 +194,7 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
                   ))}
               </div>
             </div>
-            <DropdownMenuSeparator className="bg-zinc-800" />
+            <DropdownMenuSeparator className="bg-[var(--border-subtle)]" />
           </>
         )}
 
@@ -202,7 +202,7 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
         <div className="flex flex-col gap-0.5 p-2">
           <DropdownMenuItem 
             onClick={handleAddProfile}
-            className="cursor-pointer rounded-md px-3 py-2.5 text-sm text-zinc-300 focus:bg-zinc-800 focus:text-white"
+            className="cursor-pointer rounded-md px-3 py-2.5 text-sm text-white/70 focus:bg-[var(--surface-subtle)] focus:text-white"
           >
             <UserPlus className="mr-3 h-4 w-4" />
             Create New Profile
@@ -210,7 +210,7 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
 
           <DropdownMenuItem 
             onClick={handleAddProfile}
-            className="cursor-pointer rounded-md px-3 py-2.5 text-sm text-zinc-300 focus:bg-zinc-800 focus:text-white"
+            className="cursor-pointer rounded-md px-3 py-2.5 text-sm text-white/70 focus:bg-[var(--surface-subtle)] focus:text-white"
           >
             <Import className="mr-3 h-4 w-4" />
             Import from Chrome
@@ -218,7 +218,7 @@ export function ProfileButton({ onNavigate }: ProfileButtonProps) {
 
           <DropdownMenuItem 
             onClick={handleManageProfiles}
-            className="cursor-pointer rounded-md px-3 py-2.5 text-sm text-zinc-300 focus:bg-zinc-800 focus:text-white"
+            className="cursor-pointer rounded-md px-3 py-2.5 text-sm text-white/70 focus:bg-[var(--surface-subtle)] focus:text-white"
           >
             <Settings className="mr-3 h-4 w-4" />
             Manage Profiles
