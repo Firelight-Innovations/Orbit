@@ -5,7 +5,6 @@ import { BookmarksBar } from './components/BookmarksBar/BookmarksBar'
 import { TabContent } from './components/Tabs/TabContent'
 import { WelcomeScreen } from './components/Welcome/WelcomeScreen'
 import { ProfilesPage } from './components/Profiles/ProfilesPage'
-import { SearchPage } from './components/Search/SearchPage'
 import orbitLogo from './assets/orbit_logo.png'
 import { assistantStore } from './stores/assistantStore'
 
@@ -83,9 +82,15 @@ function App() {
 
   const activeTab = windowState?.tabs.find((tab) => tab.id === windowState.activeTabId)
 
+  // orbit://search renders Simplicity, which is a separate app served over
+  // localhost — so unlike every other orbit:// page it's backed by a
+  // WebContentsView, and behaves like an external page as far as this view is
+  // concerned (placeholder, click-to-focus, attention tracking).
+  const isSearchPage = activeTab?.url.startsWith('orbit://search') ?? false
+
   // Check if current tab is showing an internal page (rendered by React)
   // External pages are rendered by WebContentsView in the main process
-  const isInternalPage = activeTab?.url.startsWith('orbit://') ?? true
+  const isInternalPage = (activeTab?.url.startsWith('orbit://') ?? true) && !isSearchPage
 
   // Give attention to web content when clicking the content area
   const handleContentClick = () => {
@@ -168,10 +173,6 @@ function App() {
     const url = activeTab.url
 
     // Handle different internal pages
-    if (url.startsWith('orbit://search')) {
-      return <SearchPage />
-    }
-
     if (url.startsWith('orbit://profiles')) {
       return <ProfilesPage onNavigate={handleNavigate} />
     }
@@ -224,7 +225,9 @@ function App() {
               onClick={handleContentClick}
               style={{ pointerEvents: webContentHasAttention ? 'none' : 'auto', cursor: webContentHasAttention ? 'default' : 'pointer' }}
             >
-              {activeTab?.isLoading && (
+              {/* Search shows its own progress inside the view, so the tab's
+                  raw orbit:// URL is never surfaced here. */}
+              {activeTab?.isLoading && !isSearchPage && (
                 <div className="browser-loading-state">
                   <div className="browser-loading-spinner" />
                   <p>Loading {activeTab.url}...</p>

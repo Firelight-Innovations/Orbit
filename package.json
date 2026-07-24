@@ -9,7 +9,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && node scripts/sync-simplicity.mjs",
+    "sync:simplicity": "node scripts/sync-simplicity.mjs",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux"
@@ -42,8 +43,8 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.23",
-    "electron": "^31.2.0",
-    "electron-builder": "^24.13.3",
+    "electron": "^37.10.3",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "postcss": "^8.5.6",
     "shadcn": "^3.6.2",
@@ -66,6 +67,18 @@
       {
         "from": "backend",
         "to": "backend"
+      },
+      {
+        "from": "vendor/simplicity/.next/standalone",
+        "to": "simplicity/.next/standalone"
+      },
+      {
+        "from": "vendor/simplicity/drizzle",
+        "to": "simplicity/drizzle"
+      },
+      {
+        "from": "vendor/simplicity/desktop",
+        "to": "simplicity/desktop"
       }
     ],
     "win": {

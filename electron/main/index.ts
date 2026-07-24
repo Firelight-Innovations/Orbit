@@ -5,7 +5,7 @@ import { setupIpcHandlers } from './ipc'
 import { PythonBackend } from './python'
 import { closeSearchHistoryService, getSearchHistoryService } from './services/searchHistory'
 import { closeSearchSuggestionsService } from './services/searchSuggestions'
-import { closeAISearchService } from './services/aiSearchService'
+import { closeSimplicityService, getSimplicityService } from './services/simplicityService'
 // Enable remote debugging on a fixed port so Playwright can attach
 // Note: Port 9222 is freed by scripts/free-port.js before Electron starts
 app.commandLine.appendSwitch('remote-debugging-port', '9222')
@@ -52,6 +52,13 @@ const windowTabViews = new Map<number, Set<string>>()
 const uiViews = new Map<number, WebContentsView>()
 // Map of windowId -> sidebar WebContentsView (the assistant, its own renderer)
 const sidebarViews = new Map<number, WebContentsView>()
+// Map of windowId -> search WebContentsView (Simplicity, served from localhost).
+// orbit://search is the one internal page backed by a real view rather than a
+// React route, because it renders another app.
+const searchViews = new Map<number, WebContentsView>()
+// Last URL loaded into each search view, so repeated tab broadcasts don't
+// reload the page (and discard in-progress results) when nothing changed.
+const searchViewUrls = new Map<number, string>()
 let pythonBackend: PythonBackend | null = null
 let debuggingPort: number | null = 9222
 
@@ -151,6 +158,123 @@ function updateSidebarViewBounds(window: BrowserWindow): void {
   })
 }
 
+// Position the search view over the content area — identical geometry to a tab
+// view, since it stands in for one.
+function updateSearchViewBounds(window: BrowserWindow): void {
+  const view = searchViews.get(window.id)
+  if (!view) return
+
+  const bounds = window.getContentBounds()
+  const state = windowStates.get(window.id)
+  const contentWidth = state?.isAssistantOpen ? bounds.width - ASSISTANT_WIDTH : bounds.width
+
+  view.setBounds({
+    x: 0,
+    y: HEADER_HEIGHT,
+    width: contentWidth,
+    height: bounds.height - HEADER_HEIGHT
+  })
+}
+
+// Shown while Simplicity's server is still coming up. The first launch
+// provisions a Python runtime and SearXNG (~150MB), which takes long enough
+// that a blank view would read as a hang.
+const SEARCH_LOADING_HTML =
+  'data:text/html,' +
+  encodeURIComponent(
+    `<!doctype html><meta charset="utf-8">
+     <body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;
+                  background:#0f0f0f;color:#a1a1aa;font:14px system-ui,sans-serif">
+       <div style="text-align:center">
+         <div style="margin-bottom:8px">Starting search…</div>
+         <div style="font-size:12px;color:#52525b">First run downloads the search engine (~150MB)</div>
+       </div>
+     </body>`
+  )
+
+function searchErrorHtml(rawMessage: string): string {
+  // Startup errors carry filesystem paths, which can contain markup-significant
+  // characters — escape so the page renders them instead of breaking on them.
+  const message = rawMessage.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return (
+    'data:text/html,' +
+    encodeURIComponent(
+      `<!doctype html><meta charset="utf-8">
+       <body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;
+                    background:#0f0f0f;color:#a1a1aa;font:14px system-ui,sans-serif">
+         <div style="text-align:center;max-width:520px;padding:24px">
+           <div style="color:#f87171;margin-bottom:8px">Search is unavailable</div>
+           <div style="font-size:12px;color:#71717a;line-height:1.6">${message}</div>
+         </div>
+       </body>`
+    )
+  )
+}
+
+// Extract ?q= from an orbit://search URL. Non-special schemes still parse, so
+// this reads the query the omnibox put there (config/searchEngines.ts).
+function searchQueryFromUrl(url: string): string | undefined {
+  try {
+    return new URL(url).searchParams.get('q') ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+// Point the search view at Simplicity, waiting for the server if it's still
+// starting. Safe to call repeatedly — start() is memoized and the URL is only
+// reloaded when it actually changes.
+async function navigateSearchView(window: BrowserWindow, query?: string): Promise<void> {
+  const view = searchViews.get(window.id)
+  if (!view || view.webContents.isDestroyed()) return
+
+  const service = getSimplicityService()
+  let url = service.getSearchUrl(query)
+
+  if (!url) {
+    view.webContents.loadURL(SEARCH_LOADING_HTML)
+    searchViewUrls.set(window.id, SEARCH_LOADING_HTML)
+    try {
+      await service.start()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('[Simplicity] failed to start:', message)
+      if (!view.webContents.isDestroyed()) view.webContents.loadURL(searchErrorHtml(message))
+      searchViewUrls.delete(window.id)
+      return
+    }
+    url = service.getSearchUrl(query)
+    if (!url) return
+  }
+
+  if (view.webContents.isDestroyed()) return
+  if (searchViewUrls.get(window.id) === url) return
+
+  searchViewUrls.set(window.id, url)
+  view.webContents.loadURL(url)
+}
+
+// Reconcile the search view with the active tab. Called from showTabView and
+// hideAllTabViews so every navigation path stays consistent without each IPC
+// handler having to remember to do it.
+function syncSearchView(window: BrowserWindow): void {
+  const view = searchViews.get(window.id)
+  if (!view) return
+
+  const state = windowStates.get(window.id)
+  const activeTab = state?.tabs.find((t) => t.id === state.activeTabId)
+  const url = activeTab?.url ?? ''
+
+  if (!url.startsWith('orbit://search')) {
+    view.setVisible(false)
+    return
+  }
+
+  view.setVisible(true)
+  updateSearchViewBounds(window)
+  void navigateSearchView(window, searchQueryFromUrl(url))
+}
+
 // Focus the active tab's web content (returns keyboard/scroll to the page)
 function focusActiveTab(window: BrowserWindow): void {
   const state = windowStates.get(window.id)
@@ -242,6 +366,9 @@ function showTabView(window: BrowserWindow, activeTabId: string): void {
       }
     }
   }
+
+  // An external page is showing, so search isn't.
+  searchViews.get(window.id)?.setVisible(false)
 }
 
 // Hide all tab views for a window (used when showing internal pages)
@@ -255,6 +382,10 @@ function hideAllTabViews(window: BrowserWindow): void {
       view.setVisible(false)
     }
   }
+
+  // orbit://search is an internal page that needs a real view; every other
+  // internal page is a React route and wants the search view out of the way.
+  syncSearchView(window)
 }
 
 // Destroy a tab's view
@@ -548,6 +679,59 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
     sidebarView.webContents.loadFile(join(__dirname, '../renderer/sidebar.html'))
   }
 
+  // Create the search WebContentsView (Simplicity). It sits at the same layer
+  // as tab views — below the UI chrome — because it *is* the page content for
+  // orbit://search. Sandboxed like a tab view: it renders a local server, not
+  // Orbit's own renderer, so it gets no preload and no Orbit APIs.
+  const searchView = new WebContentsView({
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+  searchViews.set(mainWindow.id, searchView)
+  mainWindow.contentView.addChildView(searchView)
+  searchView.setVisible(false)
+
+  // Give it a real document immediately, for the same reason the root window
+  // gets one above: a page target with no document never answers
+  // Page.enable/Runtime.enable, and Playwright's connect_over_cdp()
+  // auto-attaches to every target and blocks on it — which hangs the AI
+  // agent's browser connection. A view that sat empty until first use would
+  // reintroduce exactly the bug that workaround exists to prevent. Dark, to
+  // match the window background and avoid a white flash on first show.
+  searchView.webContents.loadURL(
+    'data:text/html,' +
+      encodeURIComponent('<!doctype html><meta charset="utf-8"><body style="margin:0;background:#0f0f0f"></body>')
+  )
+
+  // Links out of search open as real Orbit tabs rather than popup windows.
+  searchView.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) {
+      const state = windowStates.get(mainWindow.id)
+      if (state) {
+        const newTab: TabInfo = {
+          id: `tab-${Date.now()}`,
+          title: url,
+          url,
+          isLoading: true,
+          canGoBack: false,
+          canGoForward: false
+        }
+        state.tabs.push(newTab)
+        state.activeTabId = newTab.id
+        createTabView(mainWindow, newTab.id, url)
+        showTabView(mainWindow, newTab.id)
+        broadcastTabUpdate(mainWindow.id, state)
+      }
+    }
+    return { action: 'deny' }
+  })
+
+  // Keep the chrome above the search view we just added.
+  bringUIToFront(mainWindow)
+
   // Initialize window state
   const defaultTab: TabInfo = {
     id: `tab-${Date.now()}`,
@@ -578,6 +762,9 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
     // Update sidebar view bounds
     updateSidebarViewBounds(mainWindow)
 
+    // Update search view bounds
+    updateSearchViewBounds(mainWindow)
+
     // Update tab view bounds
     const windowTabs = windowTabViews.get(mainWindow.id)
     if (windowTabs) {
@@ -602,6 +789,8 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
     }
     uiViews.delete(mainWindow.id)
     sidebarViews.delete(mainWindow.id)
+    searchViews.delete(mainWindow.id)
+    searchViewUrls.delete(mainWindow.id)
     windowStates.delete(mainWindow.id)
   })
 
@@ -624,6 +813,11 @@ function createWindow(initialTabs?: TabInfo[]): BrowserWindow {
     if (activeTab && !isInternalUrl(activeTab.url)) {
       showTabView(mainWindow, activeTabId)
     }
+
+    // A window can open directly onto orbit://search — a detached tab, or a
+    // restored session — which reaches neither showTabView nor hideAllTabViews,
+    // so reconcile the search view explicitly here.
+    syncSearchView(mainWindow)
 
     // Open DevTools on launch only when explicitly requested. An open DevTools
     // window shows up as a `devtools://` CDP page target that Playwright's
@@ -651,6 +845,18 @@ app.whenReady().then(async () => {
 
   // Port 9222 is freed by the predev script before Electron starts
   console.log(`Remote debugging enabled on port ${debuggingPort}`)
+
+  // Start Simplicity (search) in the background. Deliberately not awaited: a
+  // first run provisions a Python runtime and SearXNG, and the window should
+  // not wait on that. Search views show progress and pick it up when ready.
+  //
+  // Kicked off *before* the Python backend because the two are unrelated and
+  // PythonBackend.start() resolves only on a startup log line or a 90s
+  // timeout — so a backend that dies on boot (or is simply slow) would
+  // otherwise hold search provisioning hostage for a minute and a half.
+  getSimplicityService()
+    .start()
+    .catch((err) => console.error('[Simplicity] background start failed:', err?.message ?? err))
 
   // Start Python backend
   pythonBackend = new PythonBackend()
@@ -681,12 +887,26 @@ app.on('window-all-closed', async () => {
   // Close search suggestions service
   closeSearchSuggestionsService()
 
-  // Close AI search service
-  closeAISearchService()
+  // Stop Simplicity's server and SearXNG — neither should outlive the app
+  await closeSimplicityService()
 
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+// window-all-closed doesn't fire on macOS, and never fires when the app is
+// quit with windows still open — either path would leave Simplicity's server
+// and SearXNG running as orphans holding their ports. Quitting is deferred one
+// tick so those children are actually reaped first.
+let isQuitting = false
+app.on('before-quit', (event) => {
+  if (isQuitting) return
+  isQuitting = true
+  event.preventDefault()
+  void closeSimplicityService()
+    .catch((err) => console.error('[Simplicity] shutdown failed:', err?.message ?? err))
+    .finally(() => app.quit())
 })
 
 // Export debugging port getter
@@ -698,6 +918,10 @@ export function getDebuggingPort(): number | null {
 export function updateAllTabViewBounds(windowId: number): void {
   const window = BrowserWindow.fromId(windowId)
   if (!window) return
+
+  // The search view shares the content area, so it resizes with the assistant
+  // exactly like a tab view does.
+  updateSearchViewBounds(window)
 
   const windowTabs = windowTabViews.get(windowId)
   if (windowTabs) {
